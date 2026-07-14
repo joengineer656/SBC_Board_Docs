@@ -20,9 +20,9 @@ Your SBC exposes several hardware serial communication buses that let you connec
     sudo raspi-config
     ```
 
-    Navigate to **Interface Options → Serial Port**. When asked *"Would you like a login shell to be accessible over the serial port?"*, select **No**. When asked *"Would you like the serial port hardware to be enabled?"*, select **Yes**. Reboot when prompted.
+    Navigate to **Interface Options → Serial Port**. When asked _"Would you like a login shell to be accessible over the serial port?"_, select **No**. When asked _"Would you like the serial port hardware to be enabled?"_, select **Yes**. Reboot when prompted.
 
-    **Option 2 — Edit `/boot/config.txt` directly:**
+    **Option 2 — Edit** `/boot/config.txt `**directly:**
 
     ```bash
     sudo nano /boot/config.txt
@@ -45,7 +45,7 @@ Your SBC exposes several hardware serial communication buses that let you connec
     ## Device Nodes
 
     | Node | Description |
-    |---|---|
+    | --- | --- |
     | `/dev/ttyS0` | Mini UART — mapped to the GPIO TX/RX pins by default |
     | `/dev/ttyAMA0` | PL011 full UART — higher accuracy, preferred for most uses |
     | `/dev/serial0` | Symlink to whichever UART is connected to the GPIO header |
@@ -67,17 +67,17 @@ Your SBC exposes several hardware serial communication buses that let you connec
 
     ```python
     import serial
-
+    
     # Open the UART at 9600 baud with a 1-second read timeout
     ser = serial.Serial('/dev/ttyS0', baudrate=9600, timeout=1)
-
+    
     # Send a message to the connected device
     ser.write(b'Hello SBC\n')
-
+    
     # Read a line back from the device
     line = ser.readline()
     print(line.decode())
-
+    
     ser.close()
     ```
 
@@ -85,7 +85,7 @@ Your SBC exposes several hardware serial communication buses that let you connec
 
     ```python
     import serial.tools.list_ports
-
+    
     ports = serial.tools.list_ports.comports()
     for port in ports:
         print(port.device, port.description)
@@ -95,7 +95,6 @@ Your SBC exposes several hardware serial communication buses that let you connec
       If you skip the step of disabling the serial console, the Linux kernel keeps `/dev/ttyS0` open as a login shell. Your Python script will receive garbled data from the OS rather than from your peripheral. Always confirm the console is disabled with `systemctl status serial-getty@ttyS0.service` — it should show **inactive**.
     </Note>
   </Tab>
-
   <Tab title="SPI">
     ## Enabling SPI
 
@@ -123,7 +122,7 @@ Your SBC exposes several hardware serial communication buses that let you connec
 
     You should see:
 
-    ```
+    ```text
     /dev/spidev0.0   /dev/spidev0.1
     ```
 
@@ -143,22 +142,22 @@ Your SBC exposes several hardware serial communication buses that let you connec
 
     ```python
     import spidev
-
+    
     spi = spidev.SpiDev()
     spi.open(0, 0)          # bus 0, chip-select 0 (CE0)
     spi.max_speed_hz = 1000000  # 1 MHz clock
-
+    
     # xfer2 performs a full-duplex transfer and keeps CE asserted
     response = spi.xfer2([0x01, 0x02, 0x03])
     print(response)         # list of bytes received simultaneously
-
+    
     spi.close()
     ```
 
     Common `spidev` settings:
 
     | Attribute | Description | Example |
-    |---|---|---|
+    | --- | --- | --- |
     | `max_speed_hz` | SPI clock frequency in Hz | `1000000` (1 MHz) |
     | `mode` | Clock polarity/phase (0–3) | `spi.mode = 0` |
     | `bits_per_word` | Word size | `spi.bits_per_word = 8` |
@@ -168,7 +167,6 @@ Your SBC exposes several hardware serial communication buses that let you connec
       For devices that require SPI mode 1 or mode 3 (clock idles high or data latches on the falling edge), set `spi.mode` **before** calling `spi.xfer2()`. Mismatched clock polarity is the most common cause of garbage data from SPI sensors.
     </Tip>
   </Tab>
-
   <Tab title="I2C">
     ## Enabling I2C
 
@@ -205,7 +203,7 @@ Your SBC exposes several hardware serial communication buses that let you connec
 
     The output is a grid showing hexadecimal addresses. A `--` means no device, while a hex address (e.g. `48`) means a device responded there:
 
-    ```
+    ```text
          0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
     00:          -- -- -- -- -- -- -- -- -- -- -- -- --
     10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -219,27 +217,27 @@ Your SBC exposes several hardware serial communication buses that let you connec
 
     ```python
     import smbus2
-
+    
     bus = smbus2.SMBus(1)   # I2C bus 1 (/dev/i2c-1)
-
+    
     # Read register 0x00 from the device at address 0x48
     value = bus.read_byte_data(0x48, 0x00)
     print(f'Register value: {value:#04x}')
-
+    
     # Write a byte to a register
     bus.write_byte_data(0x48, 0x01, 0xFF)
-
+    
     # Read a 16-bit big-endian word (e.g. ADC result)
     word = bus.read_word_data(0x48, 0x00)
     print(f'Word value: {word}')
-
+    
     bus.close()
     ```
 
     Common `smbus2` operations:
 
     | Method | Description |
-    |---|---|
+    | --- | --- |
     | `read_byte_data(addr, reg)` | Read one byte from a register |
     | `write_byte_data(addr, reg, val)` | Write one byte to a register |
     | `read_word_data(addr, reg)` | Read two bytes (little-endian) |

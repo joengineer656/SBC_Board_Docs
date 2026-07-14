@@ -14,28 +14,6 @@
         "tab": "Documentation",
         "groups": [
           {
-            "group": "Get Started",
-            "pages": []
-          },
-          {
-            "group": "Hardware",
-            "pages": [
-              "hardware/specifications",
-              "hardware/pinout",
-              "hardware/interfaces",
-              "hardware/power"
-            ]
-          },
-          {
-            "group": "Software Setup",
-            "pages": [
-              "software/os-installation",
-              "software/first-boot",
-              "software/package-management",
-              "software/gpio"
-            ]
-          },
-          {
             "group": "Interfaces & Connectivity",
             "pages": [
               "connectivity/uart-spi-i2c",

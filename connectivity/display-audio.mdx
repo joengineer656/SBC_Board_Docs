@@ -1,0 +1,269 @@
+---
+title: "Display and Audio Setup on Your SBC"
+sidebarTitle: "Display & Audio"
+description: "Configure HDMI resolution, DSI touchscreen panels, ALSA audio output, and I2S DAC HATs to add display and sound to your SBC projects."
+---
+
+Your SBC supports a range of display and audio output options suitable for everything from media centers and kiosk displays to audio-processing projects and digital signage. HDMI provides plug-and-play compatibility with virtually any modern monitor or television, the DSI ribbon-cable connector drives official touchscreen displays, and the ALSA audio subsystem handles both HDMI audio and I2S digital audio HATs. This guide walks through configuring each output so you can get pixels on screen and sound out of your speakers with minimal friction.
+
+## HDMI Output
+
+HDMI output is enabled by default. Plug your monitor or television into the HDMI port **before powering on the board** — the GPU negotiates the display's capabilities during the boot sequence, and hotplug detection after boot may require additional configuration.
+
+### Checking the Connected Display
+
+On a desktop image, use `xrandr` to see which outputs are active and what resolution is negotiated:
+
+```bash
+xrandr
+```
+
+On a headless or console-only image, use the `tvservice` utility:
+
+```bash
+tvservice -s
+```
+
+Example output:
+
+```
+state 0xa [HDMI CEA (16) RGB lim 16:9], 1920x1080 @ 60.00Hz, progressive
+```
+
+### Forcing a Specific Resolution
+
+If your display is not detected correctly or you need a fixed resolution, override it in `/boot/config.txt`:
+
+```bash
+sudo nano /boot/config.txt
+```
+
+Add or update these lines:
+
+```ini
+hdmi_group=1
+hdmi_mode=16  # 1080p 60Hz — see table below
+```
+
+Reboot to apply:
+
+```bash
+sudo reboot
+```
+
+### Common hdmi_mode Values
+
+`hdmi_group=1` selects CEA (consumer TV standards); `hdmi_group=2` selects DMT (monitor standards). The most frequently used CEA modes are:
+
+| `hdmi_mode` | Resolution | Refresh Rate | Notes |
+|---|---|---|---|
+| `4` | 1280×720 | 60 Hz | 720p — good for older TVs |
+| `16` | 1920×1080 | 60 Hz | 1080p 60Hz — most common |
+| `31` | 1920×1080 | 50 Hz | 1080p 50Hz — PAL regions |
+| `32` | 1920×1080 | 24 Hz | Cinema 24fps |
+| `95` | 3840×2160 | 30 Hz | 4K 30Hz |
+| `97` | 3840×2160 | 60 Hz | 4K 60Hz (requires HDMI 2.0) |
+
+<Tip>
+  If the image is oversized or clipped at the edges of your TV, disable overscan by adding `disable_overscan=1` to `/boot/config.txt`. Monitors almost never need this; TVs frequently do.
+</Tip>
+
+## DSI Touchscreen Display
+
+The DSI (Display Serial Interface) connector on the board provides a high-speed lane for driving official ribbon-cable LCD panels, including capacitive touchscreens. No USB or HDMI is required — the display connects entirely through the flat ribbon cable.
+
+<Steps>
+  <Step title="Connect the ribbon cable">
+    Power off the board completely before connecting the display. Open the DSI connector latch, insert the ribbon cable with the contacts facing the correct direction (typically toward the board), and press the latch closed. A loose connection is the most common cause of a blank DSI display.
+  </Step>
+  <Step title="Enable the DSI overlay in /boot/config.txt">
+    ```bash
+    sudo nano /boot/config.txt
+    ```
+
+    Add the overlay for your panel. For the 7-inch official touchscreen:
+
+    ```ini
+    dtoverlay=vc4-kms-dsi-7inch
+    ```
+
+    Other common overlays:
+
+    ```ini
+    # 5-inch DSI display
+    dtoverlay=vc4-kms-dsi-5inch
+
+    # Generic MIPI DSI panel (consult your panel's datasheet)
+    dtoverlay=vc4-kms-v3d
+    ```
+  </Step>
+  <Step title="Reboot and verify">
+    ```bash
+    sudo reboot
+    ```
+
+    The DSI display should show the desktop or console output after rebooting. If the screen stays black, double-check the ribbon cable seating and confirm the overlay name matches your exact panel model.
+  </Step>
+  <Step title="Rotate the display if needed">
+    Add `display_rotate` to `/boot/config.txt` to adjust orientation:
+
+    ```ini
+    display_rotate=0   # Normal (default)
+    display_rotate=1   # 90° clockwise
+    display_rotate=2   # 180° (upside down)
+    display_rotate=3   # 270° clockwise
+    ```
+
+    Reboot after changing the value.
+  </Step>
+</Steps>
+
+<Note>
+  Touch input is handled automatically through the I2C bus when using the official DSI touchscreen. You do not need to install a separate driver. If touch is unresponsive after enabling the overlay, verify that I2C is enabled in `raspi-config` (see the [UART, SPI, and I2C guide](/connectivity/uart-spi-i2c)).
+</Note>
+
+## Audio Output
+
+The SBC exposes audio through HDMI and, on boards that include a 3.5 mm jack, through an analog headphone output. The Linux ALSA (Advanced Linux Sound Architecture) subsystem manages all audio devices.
+
+### Listing Audio Devices
+
+```bash
+aplay -l
+```
+
+Example output showing HDMI audio and an analog output:
+
+```
+**** List of PLAYBACK Hardware Devices ****
+card 0: Headphones [bcm2835 Headphones], device 0: bcm2835 Headphones [bcm2835 Headphones]
+  Subdevices: 8/8
+  Subdevice #0: subdevice #0
+card 1: vc4hdmi [vc4-hdmi], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
+  Subdevices: 1/1
+  Subdevice #0: subdevice #0
+```
+
+### Playing a Test Tone
+
+Verify your speaker or headphone output is working with a pink-noise test:
+
+```bash
+speaker-test -c2 -t wav
+```
+
+`-c2` specifies two channels (stereo); `-t wav` plays a voice announcement rather than white noise. Press `Ctrl+C` to stop.
+
+Play an audio file with `aplay`:
+
+```bash
+aplay /usr/share/sounds/alsa/Front_Left.wav
+```
+
+### Setting the Default Audio Device
+
+**Using alsamixer (interactive TUI):**
+
+```bash
+alsamixer
+```
+
+Press `F6` to choose a sound card, and use the arrow keys to adjust volume levels. Press `Esc` to exit. Save the mixer state so it persists across reboots:
+
+```bash
+sudo alsactl store
+```
+
+**Using raspi-config:**
+
+```bash
+sudo raspi-config
+```
+
+Navigate to **System Options → Audio** and select your preferred output (HDMI or headphone jack).
+
+**Force audio output via ALSA config:**
+
+```bash
+sudo nano /etc/asound.conf
+```
+
+```
+defaults.pcm.card 1
+defaults.ctl.card 1
+```
+
+Replace `1` with the card number shown by `aplay -l` for your target device.
+
+### Enabling HDMI Audio
+
+If HDMI audio is not listed by `aplay -l`, ensure it is enabled in `/boot/config.txt`:
+
+```bash
+sudo nano /boot/config.txt
+```
+
+```ini
+dtparam=audio=on
+```
+
+Reboot and run `aplay -l` again to confirm the HDMI audio card appears.
+
+## I2S Digital Audio
+
+I2S (Inter-IC Sound) is a serial bus for digital audio. DAC HATs and audio expansion boards use I2S to deliver high-quality sound that bypasses the board's internal analog path entirely — eliminating the noise and limited dynamic range of on-board analog circuits.
+
+<Steps>
+  <Step title="Identify the overlay for your audio HAT">
+    Most I2S audio HATs publish the required device-tree overlay in their documentation. Common examples:
+
+    | HAT / DAC Chip | Overlay |
+    |---|---|
+    | HiFiBerry DAC | `hifiberry-dac` |
+    | HiFiBerry DAC+ / DAC+ Pro | `hifiberry-dacplus` |
+    | HiFiBerry AMP2 | `hifiberry-amp2` |
+    | IQaudio DAC | `iqaudio-dacplus` |
+    | JustBoom DAC | `justboom-dac` |
+    | PCM5102 (generic) | `hifiberry-dac` |
+  </Step>
+  <Step title="Enable the overlay in /boot/config.txt">
+    ```bash
+    sudo nano /boot/config.txt
+    ```
+
+    Add the overlay line, for example:
+
+    ```ini
+    dtoverlay=hifiberry-dac
+    ```
+
+    If the HAT documentation says to disable on-board audio first, also add:
+
+    ```ini
+    dtparam=audio=off
+    ```
+  </Step>
+  <Step title="Reboot and confirm the new ALSA device">
+    ```bash
+    sudo reboot
+    aplay -l
+    ```
+
+    The I2S DAC should now appear as a new sound card, for example:
+
+    ```
+    card 2: sndrpihifiberry [snd_rpi_hifiberry_dac], device 0: HifiBerry DAC HiFi pcm5102a-hifi-0
+    ```
+  </Step>
+  <Step title="Test audio output through the DAC">
+    ```bash
+    speaker-test -c2 -t wav -D hw:2,0
+    ```
+
+    Replace `2` with the card number shown for your HAT in `aplay -l`.
+  </Step>
+</Steps>
+
+<Tip>
+  If you need a quick, reliable audio output without configuring overlays or dealing with I2S — for example, during prototyping or in a classroom setting — plug in a **USB audio adapter**. It appears instantly as a new ALSA device with no `/boot/config.txt` changes required. Most USB audio adapters are class-compliant and work out of the box on Linux with stereo output and a microphone input.
+</Tip>

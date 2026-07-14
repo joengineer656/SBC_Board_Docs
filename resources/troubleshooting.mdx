@@ -1,0 +1,234 @@
+---
+title: "Troubleshooting Common SBC Board Problems"
+sidebarTitle: "Troubleshooting"
+description: "Diagnose and fix power, boot, Wi-Fi, GPIO, and USB issues on the SBC board with step-by-step solutions and useful diagnostic commands."
+---
+
+Most problems you encounter with the board fall into a small number of recognisable categories. Work through the relevant section below to identify the root cause and apply the fix. If the issue persists after following these steps, the [diagnostic commands](#useful-diagnostic-commands) at the bottom of this page will help you gather information to share when asking for help.
+
+## Power Issues
+
+<Warning>
+  Always use a **5V / 3A (15W minimum) USB-C power supply**. An underpowered supply is the single most common cause of instability, random reboots, and corrupted SD cards. Verify your supply before troubleshooting anything else.
+</Warning>
+
+### No power LED after plugging in
+
+1. Try a different USB-C cable. Many cables are charge-only and cannot carry enough current for the board.
+2. Try a different USB-C power supply rated at 5V/3A or higher.
+3. Inspect the USB-C port on the board for bent or pushed-in pins.
+4. Confirm the power supply output with a USB power meter if available — it should show close to 5V at idle.
+
+### Board reboots randomly or unexpectedly
+
+Random reboots during use almost always indicate an **underpowered supply**. The board draws significantly more current under CPU load than at idle, causing the supply voltage to sag below the minimum threshold.
+
+1. Replace your power supply with one that is explicitly rated **5V / 3A** or higher.
+2. Avoid powering the board from a USB port on a laptop or desktop computer — these ports are limited to 0.5–0.9A.
+3. If you have USB peripherals attached (hard drives, hubs), use a **powered USB hub** to offload their current draw from the board's supply.
+
+### Low voltage warning in logs
+
+The SoC monitors supply voltage and records throttling events in a status register. Read the current value with:
+
+```bash
+vcgencmd get_throttled
+```
+
+The command returns a hexadecimal bitmask. The key bits to understand are:
+
+| Bit | Hex value | Meaning |
+|-----|-----------|---------|
+| 0 | `0x1` | Under-voltage detected (currently) |
+| 1 | `0x2` | ARM frequency capped (currently) |
+| 2 | `0x4` | Currently throttled |
+| 16 | `0x10000` | Under-voltage has occurred since last reboot |
+| 17 | `0x20000` | ARM frequency capping has occurred since last reboot |
+| 18 | `0x40000` | Throttling has occurred since last reboot |
+
+A result of `throttled=0x0` means no throttling has occurred. Any non-zero value indicates a power problem — replace your supply.
+
+---
+
+## Boot Issues
+
+### Stuck on a rainbow or colour test screen
+
+The rainbow screen appears when the GPU firmware loads but the kernel cannot start — most commonly because of a **corrupted or incorrectly flashed microSD card**.
+
+1. Re-flash the microSD card using a fresh copy of the OS image downloaded from the official downloads page.
+2. Verify the downloaded image against its published SHA256 checksum before flashing.
+3. Try a different microSD card — cards do fail, especially cheaper or older ones.
+
+### No video output on HDMI
+
+1. Ensure the HDMI cable is plugged in **before** applying power. The display is detected at boot; hot-plugging after power-on may not work without additional configuration.
+2. Try a different HDMI cable. Some cables have marginal signal integrity and fail at higher resolutions.
+3. Try a different monitor or TV.
+4. If your monitor uses HDMI 2.x, try forcing HDMI 1.4 by adding `hdmi_enable_4kp60=0` to the boot config file.
+5. Confirm that the OS has booted by checking whether you can SSH into the board — if SSH works, the board is running and the issue is display-specific.
+
+### Kernel panic on boot
+
+A kernel panic during boot, visible as a screen full of error text, usually means you have flashed an **incompatible OS image**.
+
+1. Confirm you are using an image built for **ARM64 (aarch64)** architecture. Images for ARMv7 (32-bit ARM) or x86 will not boot.
+2. Download the official board image from the downloads page rather than a generic distribution image.
+3. If you recently updated the kernel or bootloader, boot from a known-good backup SD card and investigate the update logs.
+
+---
+
+## Wi-Fi Issues
+
+### Wi-Fi interface not connecting to a network
+
+1. Restart the network manager service:
+   ```bash
+   sudo systemctl restart NetworkManager
+   ```
+2. Verify that the interface is visible to the OS:
+   ```bash
+   ip link show wlan0
+   ```
+3. Scan for available networks to confirm the radio is working:
+   ```bash
+   sudo iwlist wlan0 scan | grep ESSID
+   ```
+4. Check that you are within range and that the SSID and password are correct.
+
+### Slow Wi-Fi speeds
+
+1. Switch to the **5 GHz band** if your router supports it — 5 GHz offers higher throughput and less interference than the crowded 2.4 GHz band.
+2. Move the board closer to the router and reduce physical obstructions between them.
+3. Check for interference sources near the board: microwave ovens, Bluetooth devices, and other 2.4 GHz radios all cause congestion.
+4. Run `iwconfig wlan0` and check the reported signal level (`Signal level`) and bit rate — a weak signal level (below -70 dBm) indicates a range or obstruction problem.
+
+### Wi-Fi drops connection intermittently
+
+Power management on the wireless interface puts the adapter into a sleep state to save energy, which causes connection drops. Disable it:
+
+```bash
+sudo iw dev wlan0 set power_save off
+```
+
+To make this permanent across reboots:
+
+```bash
+sudo bash -c 'cat > /etc/NetworkManager/conf.d/wifi-powersave-off.conf << EOF
+[connection]
+wifi.powersave = 2
+EOF'
+sudo systemctl restart NetworkManager
+```
+
+---
+
+## GPIO Issues
+
+### A GPIO pin is not responding to my code
+
+1. **Verify the pin number scheme.** Many GPIO libraries support both **BCM numbering** (by the SoC's GPIO number) and **Board numbering** (physical pin position on the header). Mixing these up is the most common cause of "wrong pin" errors. Check your library's documentation and set the numbering mode explicitly.
+2. Confirm the pin is configured as an output (if you are trying to drive it) or as an input (if you are trying to read it) — a pin left in the wrong mode will appear unresponsive.
+3. Check that no other process or device tree overlay is claiming the pin. Run `sudo cat /sys/kernel/debug/gpio` to see the current state and owner of each GPIO line.
+
+### Permission denied when accessing GPIO
+
+If your script returns a permission error when accessing GPIO:
+
+```bash
+sudo usermod -aG gpio $USER
+```
+
+Log out and back in (or start a new shell session) for the group change to take effect. Verify the change with `groups` — you should see `gpio` in the list.
+
+### A GPIO pin shows an unexpected voltage level
+
+1. Measure the pin with a **multimeter** to get an accurate reading — floating inputs can be read as either high or low unpredictably.
+2. Check for **conflicting device tree overlays** in your boot configuration. Multiple overlays assigning the same pin to different functions produce undefined behaviour.
+3. If the pin is an input, add an appropriate **pull-up or pull-down resistor** (or enable the internal pull resistor in software) to prevent it floating.
+4. Remember that all GPIO operate at **3.3V** — do not connect 5V signals directly.
+
+---
+
+## USB Issues
+
+### A USB device is not recognised
+
+1. Try a **different USB port** on the board. The ports are on a hub controller, and individual downstream ports can sometimes misbehave with specific devices.
+2. Try a **powered USB hub** between the board and the device. Devices with high current requirements (USB hard drives, some webcams) may not get enough current from the board's ports.
+3. Try the device on a separate computer to rule out a faulty device.
+4. Check `lsusb` to see whether the device appears at all — even if it is not functional, its presence in the list confirms the hardware layer is working.
+
+### A USB drive is not mounting automatically
+
+Run the following command immediately after plugging in the drive to see the kernel's device recognition log:
+
+```bash
+sudo dmesg | tail -20
+```
+
+Look for lines referencing `usb`, `sd`, or `scsi`. A successful recognition will show the assigned device node (e.g., `/dev/sda1`). If you see error messages, they will indicate whether the problem is a filesystem error, a current issue, or a device fault.
+
+To mount the drive manually once you know its device node:
+
+```bash
+sudo mkdir -p /mnt/usb
+sudo mount /dev/sda1 /mnt/usb
+```
+
+---
+
+## Getting More Help
+
+If the steps above do not resolve your issue, these resources are available to you:
+
+<CardGroup cols={2}>
+  <Card title="FAQ" icon="circle-question" href="/resources/faq">
+    Browse answers to the most common setup and usage questions.
+  </Card>
+  <Card title="GitHub Issues" icon="bug" href="https://github.com">
+    Search existing issues or open a new bug report on the community tracker.
+  </Card>
+  <Card title="Community Forum" icon="comments" href="https://github.com">
+    Ask questions and get answers from other users and maintainers.
+  </Card>
+  <Card title="Open a Bug Report" icon="circle-exclamation" href="https://github.com">
+    Report a reproducible defect with logs and environment details.
+  </Card>
+</CardGroup>
+
+---
+
+## Useful Diagnostic Commands
+
+Run these commands on the board to gather system information when reporting a bug or asking for help. Include their output in your issue or forum post.
+
+```bash
+# Check system logs
+sudo journalctl -xe
+
+# Check CPU temperature
+vcgencmd measure_temp
+
+# Check throttling status
+vcgencmd get_throttled
+
+# Check memory usage
+free -h
+
+# Check disk usage
+df -h
+
+# List connected USB devices
+lsusb
+
+# List I2C devices
+sudo i2cdetect -y 1
+
+# Check active network interfaces
+ip addr show
+```
+
+<Tip>
+  When opening a bug report, copy the output of all the commands above into the issue body. This gives maintainers everything they need to reproduce your environment and dramatically speeds up diagnosis.
+</Tip>

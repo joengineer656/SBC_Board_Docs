@@ -1,0 +1,152 @@
+---
+title: "Blink an LED: Your First Hardware Hello World"
+sidebarTitle: "Blink LED"
+description: "Wire up an LED to your SBC's GPIO pins and write your first hardware program in Python and C to make it blink on and off."
+---
+
+Blinking an LED is the hardware equivalent of printing "Hello, World!" — it is the first project nearly every embedded developer runs on a new board. By the end of this guide you will have a physical circuit wired to your SBC's GPIO header and a working program that toggles the LED on and off at half-second intervals. Once you can blink an LED you have confirmed that your GPIO subsystem is healthy and you are ready to tackle any hardware project.
+
+## What You Need
+
+Before you start, gather the following components:
+
+<CardGroup cols={2}>
+  <Card title="LED (any color)" icon="circle-dot">
+    A standard 5mm through-hole LED. Red, green, and yellow all work equally well for this exercise.
+  </Card>
+  <Card title="330Ω Resistor" icon="minus">
+    A current-limiting resistor — look for the orange-orange-brown color bands. Do not skip this component.
+  </Card>
+  <Card title="Breadboard" icon="table-cells">
+    A half-size or full-size solderless breadboard gives you a safe, solder-free way to prototype the circuit.
+  </Card>
+  <Card title="Jumper Wires (×2)" icon="cable-car">
+    Two male-to-female jumper wires to connect the breadboard to the SBC's 40-pin header.
+  </Card>
+</CardGroup>
+
+You also need your SBC board running its default OS image with Python 3 available.
+
+## Circuit Wiring
+
+Wire the circuit in the following order before powering anything on:
+
+1. Connect a **male-to-female jumper wire** from **GPIO17 (physical pin 11)** on the SBC header to one end of the **330Ω resistor** on the breadboard.
+2. Connect the other end of the resistor to the **anode** (long leg) of the LED.
+3. Connect the **cathode** (short leg) of the LED back to **GND (physical pin 9)** on the SBC header using a second jumper wire.
+
+```
+GPIO17 (pin 11) ──► [330Ω] ──► LED(+) ──► LED(−) ──► GND (pin 9)
+```
+
+<Note>
+  The 330Ω resistor is **required**. GPIO pins source roughly 3.3 V and an LED
+  forward voltage is around 2 V, leaving ~1.3 V across the resistor. Without it
+  you would push ~40 mA through the LED and potentially damage both the LED and
+  the GPIO driver. With a 330Ω resistor the current is safely limited to ~4 mA.
+</Note>
+
+## Software
+
+<Steps>
+  <Step title="Verify gpiozero is available">
+    The `gpiozero` library ships pre-installed on the official OS image. Confirm it is present — or install it if you are using a minimal image:
+
+    ```bash
+    python3 -c "import gpiozero; print(gpiozero.__version__)"
+    # If the import fails, install it:
+    pip install gpiozero
+    ```
+  </Step>
+
+  <Step title="Create blink.py">
+    Create a new file called `blink.py` in your home directory and paste in the following code:
+
+    ```python blink.py
+    from gpiozero import LED
+    from time import sleep
+
+    led = LED(17)  # GPIO17 = physical pin 11
+
+    print("LED blinking. Press Ctrl+C to stop.")
+    try:
+        while True:
+            led.on()
+            sleep(0.5)
+            led.off()
+            sleep(0.5)
+    except KeyboardInterrupt:
+        print("Stopped.")
+        led.off()
+    ```
+
+    `LED(17)` references GPIO17 in BCM numbering — the same pin you wired to the resistor. The `try / except` block ensures the LED is turned off cleanly when you interrupt the script.
+  </Step>
+
+  <Step title="Run the script">
+    Execute the script with Python 3:
+
+    ```bash
+    python3 blink.py
+    ```
+
+    You should see the LED begin to flash at a steady 1 Hz rate (0.5 s on, 0.5 s off) and the message `LED blinking. Press Ctrl+C to stop.` printed to your terminal.
+  </Step>
+
+  <Step title="Stop the script">
+    Press **Ctrl+C** in the terminal. The `KeyboardInterrupt` handler turns the LED off and prints `Stopped.` before the program exits cleanly.
+  </Step>
+</Steps>
+
+## C Version with libgpiod
+
+If you prefer C — or need tighter timing control — use `libgpiod` to drive the pin directly from userspace without any kernel module dependencies.
+
+Install the library first:
+
+```bash
+sudo apt install libgpiod-dev
+```
+
+Then create and compile `blink.c`:
+
+```c blink.c
+#include <gpiod.h>
+#include <stdio.h>
+#include <unistd.h>
+
+int main() {
+    struct gpiod_chip *chip = gpiod_chip_open("/dev/gpiochip0");
+    struct gpiod_line *line = gpiod_chip_get_line(chip, 17);
+    gpiod_line_request_output(line, "blink", 0);
+    printf("Blinking 10 times...\n");
+    for (int i = 0; i < 10; i++) {
+        gpiod_line_set_value(line, 1); sleep(1);
+        gpiod_line_set_value(line, 0); sleep(1);
+    }
+    gpiod_line_release(line);
+    gpiod_chip_close(chip);
+    return 0;
+}
+```
+
+Compile and run in a single command:
+
+```bash
+gcc -o blink blink.c -lgpiod && ./blink
+```
+
+The program blinks the LED 10 times at 1-second intervals and then exits, properly releasing the GPIO line and closing the chip handle.
+
+<Tabs>
+  <Tab title="Python (gpiozero)">
+    Best for rapid prototyping and interactive development. `gpiozero` abstracts pin numbering, cleanup, and PWM so you can focus on application logic.
+  </Tab>
+  <Tab title="C (libgpiod)">
+    Best for production firmware, real-time loops, or when you need to minimise dependencies. `libgpiod` is the modern, stable userspace GPIO ABI supported by the mainline Linux kernel.
+  </Tab>
+</Tabs>
+
+<Tip>
+  Once your LED is blinking reliably, explore PWM-based brightness control, button-triggered events, and multi-pin patterns in the **GPIO Programming Guide**. All of the patterns you learn there build directly on the circuit you just assembled.
+</Tip>

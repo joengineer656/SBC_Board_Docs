@@ -1,47 +1,134 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Quick Start Guide: Boot Your SBC Board in Minutes"
+sidebarTitle: "Quick Start"
+description: "Flash an OS image, connect your peripherals, and power on your SBC Board for the first time. Go from unboxing to a running Linux desktop in under 15 minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+This guide walks you through everything you need to get your SBC Board running for the first time. By the end you will have a fully booted Linux environment that you can access either through a connected display or remotely over SSH. No prior embedded Linux experience is required — just follow the steps below in order.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Gather What You Need">
+    Before you begin, collect all the required hardware. Having everything on hand before you start avoids interruptions mid-setup.
 
-    ```bash
-    npm install your-package
-    ```
+    **Required items:**
+
+    - ✅ **SBC Board** — your main board
+    - ✅ **microSD card** — 16 GB or larger, Class 10 or A1-rated recommended
+    - ✅ **USB-C power supply** — 5 V, 3 A (15 W) minimum; an underpowered supply causes instability
+    - ✅ **USB-C cable** — to connect the power supply to the board
+    - ✅ **HDMI monitor and cable** — for the initial setup display output
+    - ✅ **USB keyboard and mouse** — for navigating the first-boot wizard
+
+    **Optional but useful:**
+
+    - A second computer (Windows, macOS, or Linux) to flash the microSD card
+    - A wired Ethernet cable for a more reliable first-boot network connection
+    - A case or heatsink if you plan to run the board under sustained load
+
+    <Info>
+      Check your power supply's output rating before proceeding. Many phone chargers are rated at only 5 V / 1 A or 5 V / 2 A, which is not sufficient for reliable operation. Using an underpowered supply is the most common cause of random reboots and SD card corruption.
+    </Info>
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
 
-    ```bash
-    your-cli init
-    ```
+  <Step title="Download and Flash the OS Image">
+    Download the latest official OS image and write it to your microSD card using a flashing tool on your computer.
+
+    **1. Download the image**
+
+    Visit the [OS Installation page](/software/os-installation) to find the latest stable image. Download the `.img.xz` or `.img.gz` file to your computer.
+
+    **2. Flash with Raspberry Pi Imager (recommended)**
+
+    [Raspberry Pi Imager](https://www.raspberrypi.com/software/) is a free, cross-platform tool that handles downloading, verifying, and writing images in one step.
+
+    1. Open Raspberry Pi Imager and click **Choose OS → Use custom**.
+    2. Select the `.img.xz` file you downloaded.
+    3. Click **Choose Storage** and select your microSD card — double-check you have the right drive.
+    4. Click the ⚙️ **gear icon** to pre-configure Wi-Fi credentials, hostname, and SSH access before flashing.
+    5. Click **Write** and wait for the verify step to complete.
+
+    **Alternatively, use balenaEtcher**
+
+    [balenaEtcher](https://etcher.balena.io/) offers a similarly simple interface: select image → select drive → Flash.
+
+    <Warning>
+      Flashing will erase all existing data on the microSD card. Make sure you have selected the correct drive before confirming. Flashing to the wrong device can cause data loss on your computer.
+    </Warning>
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+
+  <Step title="Insert the microSD Card and Connect Peripherals">
+    With the OS image flashed and verified, prepare the board for its first boot.
+
+    1. **Insert the microSD card** — push it into the microSD slot on the underside of the board until it clicks into place.
+    2. **Connect the HDMI cable** — plug one end into the board's HDMI port and the other into your monitor.
+    3. **Connect your USB keyboard and mouse** — plug them into the available USB-A ports.
+    4. **Connect Ethernet (optional but recommended)** — plug in a network cable for a stable internet connection during first boot.
+    5. **Do not connect power yet** — wait until all peripherals are attached.
+
+    <Tip>
+      Connect the HDMI cable before powering on. Some monitors and display protocols do not support hot-plug detection, so connecting the display after boot may result in no video output.
+    </Tip>
+  </Step>
+
+  <Step title="Power On and Complete First Boot">
+    Connect the USB-C power supply to power on the board. SBC Board has no physical power button — it boots as soon as power is applied.
+
+    1. **Connect the USB-C power cable** to the board's power port. The status LED should illuminate immediately.
+    2. **Watch the boot sequence** on your HDMI monitor. You will see boot log messages followed by the first-boot setup wizard.
+    3. **Follow the first-boot wizard** to:
+       - Set your locale, timezone, and keyboard layout
+       - Create a user account and password
+       - Connect to Wi-Fi (if you did not pre-configure it during flashing)
+       - Accept or decline optional telemetry
+    4. The system will apply any pending updates and then drop you into the desktop environment or a login prompt.
+
+    A typical first boot takes **60–90 seconds**. Subsequent boots are faster once the initial setup is complete.
+
+    <Info>
+      If the board does not appear to boot (no LED activity, no display output), re-check that the microSD card is fully seated and that your power supply meets the 5 V / 3 A requirement. See the [FAQ](/resources/faq) for further troubleshooting steps.
+    </Info>
+  </Step>
+
+  <Step title="Connect via SSH or Use the Desktop">
+    Once the board has booted, you can interact with it directly through the desktop or remotely over SSH from another computer on the same network.
+
+    **Using the desktop**
+
+    If you connected a monitor, keyboard, and mouse, you are already at the desktop. Open a terminal emulator to start running commands.
+
+    **Connecting via SSH**
+
+    Find the board's IP address from your router's admin panel, from the first-boot wizard screen, or by running `hostname -I` in a local terminal on the board.
+
+    Then, from your computer, run:
 
     ```bash
-    your-cli start
+    ssh admin@<board-ip-address>
     ```
+
+    Replace `<board-ip-address>` with the actual IP (for example, `192.168.1.42`). When prompted, enter the password you set during the first-boot wizard. If you pre-configured SSH with a public key during flashing, key-based authentication will be used automatically.
+
+    <Tip>
+      Set a static IP address or a DHCP reservation in your router for the board's MAC address. This prevents the IP from changing between reboots, making SSH connections more predictable.
+    </Tip>
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Next Steps
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+Now that your SBC Board is up and running, explore what you can build and configure next.
+
+<CardGroup cols={2}>
+  <Card title="First Boot Configuration" icon="sliders" href="/software/first-boot">
+    Expand your initial setup: change the hostname, enable additional interfaces, and configure system services.
+  </Card>
+  <Card title="GPIO Programming" icon="code-branch" href="/software/gpio">
+    Learn how to control pins, read sensors, and interface with external hardware using the 40-pin GPIO header.
+  </Card>
+  <Card title="Blink an LED" icon="lightbulb" href="/guides/blink-led">
+    Follow a step-by-step project guide to wire up and blink an LED — the embedded equivalent of "Hello, World."
+  </Card>
+  <Card title="Networking Setup" icon="network-wired" href="/connectivity/networking">
+    Configure Wi-Fi, Ethernet, and Bluetooth, and set up the board as a headless network node or access point.
+  </Card>
+</CardGroup>

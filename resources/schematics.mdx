@@ -1,0 +1,49 @@
+---
+title: "Hardware Schematics and Design Files Download"
+sidebarTitle: "Schematics"
+description: "Download open-source schematics, PCB layouts, Gerber files, and BOM for the SBC. All design files are licensed under CERN-OHL-P v2."
+---
+
+All hardware design files for this board are fully open-source and available for free download. Whether you want to study the circuit design, manufacture your own board, or adapt the design for a custom project, you have everything you need to get started.
+
+## Available Files
+
+| File | Format | Description |
+|------|--------|-------------|
+| Schematic (PDF) | PDF | Full board schematic, printable |
+| Schematic (KiCad) | .kicad_sch | Editable KiCad source |
+| PCB Layout | .kicad_pcb | PCB layout file |
+| Gerber Files | .zip | Production-ready Gerber files |
+| Bill of Materials | .csv | Component BOM with part numbers |
+
+<Note>
+  All hardware design files are released under the **CERN Open Hardware Licence Version 2 – Permissive (CERN-OHL-P v2)**. This permissive open-source hardware license allows you to study, modify, manufacture, and distribute the design — including in commercial products — with minimal restrictions. See the full license text at [ohwr.org/cern-ohl-p](https://ohwr.org/cern_ohl_p_v2.txt).
+</Note>
+
+## How to View Schematics
+
+You can open and inspect the schematic files using any of the following tools:
+
+- **KiCad (free, open-source):** The `.kicad_sch` and `.kicad_pcb` files are native KiCad format. Download the latest version at [kicad.org](https://www.kicad.org). KiCad runs on Windows, macOS, and Linux and gives you full editing capability.
+- **PDF viewer:** The exported PDF schematic is the quickest way to browse the design. Open it in any PDF viewer such as your browser, Adobe Acrobat, or Evince — no extra software required.
+- **Online KiCad viewer:** For a fast, no-install option, use [kicanvas.org](https://kicanvas.org). Drag and drop the `.kicad_sch` file directly into the browser to interactively pan, zoom, and inspect the schematic.
+
+## Key Subsystems
+
+The schematic is divided into clearly labelled sheets. Use the guide below to navigate to the section most relevant to your work.
+
+### Power Management
+This section covers the USB-C Power Delivery controller, which negotiates the 5V/3A input contract. It also contains the low-dropout regulators (LDOs) that derive the 3.3V, 1.8V, and 1.1V rails, as well as the power-sequencing logic that ensures each rail comes up in the correct order during boot.
+
+### CPU / SoC
+This sheet shows the main application processor together with its DDR memory interface. You will find the DDR termination resistors, decoupling capacitor placement notes, and the SoC's boot-mode strapping resistors here.
+
+### I/O
+The I/O sheet covers the USB hub controller (providing the downstream Type-A ports), the HDMI transmitter and its I²C configuration interface, and the GPIO level shifters that translate between the SoC's 1.8V I/O and the board's 3.3V header.
+
+### Connectivity
+This section documents the Wi-Fi and Bluetooth combo module — including its antenna matching network and RF keep-out area — along with the Gigabit Ethernet PHY, its magnetics, and RJ45 LED signalling.
+
+<Tip>
+  Use the Bill of Materials (`.csv`) to source replacement components or to verify exact part numbers when adapting the design. Each row includes the manufacturer part number, a recommended distributor SKU, and the reference designator so you can cross-reference directly with the schematic and PCB layout.
+</Tip>

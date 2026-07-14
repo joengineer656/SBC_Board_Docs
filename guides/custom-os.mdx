@@ -1,0 +1,261 @@
+---
+title: "Building and Customizing a Custom OS Image for Your SBC"
+sidebarTitle: "Custom OS"
+description: "Learn three approaches to building a custom OS image: chroot modification, Buildroot/Yocto build systems, and cloud-init for first-boot configuration."
+---
+
+The default OS image gets you up and running quickly, but production deployments often demand something more tailored — a kiosk appliance that boots straight into a single application, an embedded system stripped down to the bare minimum for a 512 MB flash card, a factory image pre-loaded with your software and company branding, or a reproducible build that your CI/CD pipeline can generate from source. This guide covers three practical approaches, from the fastest (cloud-init) to the most powerful (full build system), so you can choose the right level of customization for your project.
+
+<Note>
+  **Always back up your working OS image before making any modifications.** Use `dd` or a tool like `rpi-imager` to create a byte-for-byte copy of a known-good SD card or eMMC image before you start. A backup takes minutes; recovering from a broken image without one can take hours.
+
+  ```bash
+  # On Linux/macOS — back up an SD card to a file
+  sudo dd if=/dev/sdX of=~/backup-$(date +%Y%m%d).img bs=4M status=progress
+  ```
+</Note>
+
+## Approach 1: Modify an Existing Image with chroot
+
+The fastest path to a customized image is to mount an existing `.img` file, chroot into it on your development machine, install packages and edit configuration files as if you were working on the board itself, and then re-flash the result. You need a Linux host (or a Linux VM) for this approach.
+
+### Mount the image
+
+```bash
+# Attach the image to a loopback device and detect all partitions automatically
+sudo losetup -fP myimage.img
+
+# Find the device name that was assigned (usually /dev/loop0)
+sudo losetup -l
+
+# Mount the root filesystem partition (partition 2 on most SBC images)
+sudo mkdir -p /mnt/rootfs
+sudo mount /dev/loop0p2 /mnt/rootfs
+
+# Mount the boot partition so you can edit /boot/config.txt etc.
+sudo mkdir -p /mnt/rootfs/boot
+sudo mount /dev/loop0p1 /mnt/rootfs/boot
+```
+
+### Prepare the chroot environment
+
+Bind-mount the host's `proc`, `sys`, `dev`, and `dev/pts` filesystems so that package managers and services work correctly inside the chroot:
+
+```bash
+sudo mount --bind /proc  /mnt/rootfs/proc
+sudo mount --bind /sys   /mnt/rootfs/sys
+sudo mount --bind /dev   /mnt/rootfs/dev
+sudo mount --bind /dev/pts /mnt/rootfs/dev/pts
+```
+
+If your host machine has a different CPU architecture than the board (e.g., x86-64 host, ARM board), install QEMU user-mode emulation so that ARM binaries can run on your host:
+
+```bash
+sudo apt install qemu-user-static
+sudo cp /usr/bin/qemu-aarch64-static /mnt/rootfs/usr/bin/
+```
+
+### Enter the chroot and make changes
+
+```bash
+sudo chroot /mnt/rootfs /bin/bash
+```
+
+You are now inside the image's root filesystem. Run any customization commands you need:
+
+```bash
+# Inside the chroot
+apt update
+apt install -y git python3-pip nginx
+
+# Set a custom hostname
+echo "mysbc-appliance" > /etc/hostname
+
+# Pre-install your application
+pip3 install myapp
+
+# Disable a service you do not need
+systemctl disable bluetooth
+
+# Exit when you are done
+exit
+```
+
+### Unmount and clean up
+
+```bash
+sudo umount /mnt/rootfs/dev/pts
+sudo umount /mnt/rootfs/dev
+sudo umount /mnt/rootfs/proc
+sudo umount /mnt/rootfs/sys
+sudo umount /mnt/rootfs/boot
+sudo umount /mnt/rootfs
+sudo losetup -d /dev/loop0
+```
+
+Your modified `myimage.img` file is now ready to flash to an SD card or eMMC module.
+
+<Tip>
+  Use `pishrink.sh` to shrink the image to the smallest possible size before distributing it. `pishrink.sh` truncates unused filesystem space and re-expands the partition to fill the target medium on first boot:
+
+  ```bash
+  # Install pishrink
+  wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
+  chmod +x pishrink.sh
+
+  # Shrink the image (creates myimage-shrunk.img)
+  sudo ./pishrink.sh myimage.img myimage-shrunk.img
+  ```
+
+  A typical 8 GB OS image can shrink to under 2 GB, dramatically cutting download times for end users.
+</Tip>
+
+## Approach 2: Use a Build System (Buildroot or Yocto)
+
+Build systems generate a complete OS image from source — kernel, bootloader, root filesystem, and all userspace packages — based on a declarative configuration. The result is fully reproducible and contains only what you explicitly include, making it ideal for minimal or security-hardened appliance images.
+
+### Buildroot
+
+[Buildroot](https://buildroot.org) is the simpler of the two systems. It uses a Kconfig-based configuration (the same system as the Linux kernel) and builds everything into a single output directory.
+
+```bash
+# Clone Buildroot
+git clone https://gitlab.com/buildroot.org/buildroot.git
+cd buildroot
+
+# Start from the board's defconfig (check the open-source repo for the exact name)
+make <board_name>_defconfig
+
+# Open the interactive menu to customize packages, kernel options, etc.
+make menuconfig
+
+# Build — this takes 30–90 minutes on first run
+make -j$(nproc)
+
+# Output image is at:
+ls output/images/
+```
+
+A minimal Buildroot configuration for an SBC target looks like this:
+
+```ini buildroot.config (excerpt)
+BR2_aarch64=y
+BR2_TOOLCHAIN_BUILDROOT_GLIBC=y
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_DEFCONFIG="<board_defconfig>"
+BR2_PACKAGE_BUSYBOX=y
+BR2_PACKAGE_OPENSSH=y
+BR2_PACKAGE_PYTHON3=y
+BR2_TARGET_ROOTFS_EXT2=y
+BR2_TARGET_ROOTFS_EXT2_4=y
+```
+
+### Yocto / OpenEmbedded
+
+[Yocto](https://www.yoctoproject.org) is more complex than Buildroot but offers finer-grained control, a mature layer ecosystem, and better support for long-term maintenance of commercially deployed images.
+
+```bash
+# Clone Poky (the Yocto reference distribution)
+git clone -b kirkstone https://git.yoctoproject.org/poky
+cd poky
+
+# Add the board's BSP layer (check the open-source repo for the layer URL)
+git clone https://github.com/<your-org>/meta-<board-name>.git
+
+# Initialize the build environment
+source oe-init-build-env build
+
+# Add the BSP layer to bblayers.conf
+bitbake-layers add-layer ../meta-<board-name>
+
+# Set the machine in local.conf
+echo 'MACHINE = "<board-machine-name>"' >> conf/local.conf
+
+# Build a minimal image
+bitbake core-image-minimal
+```
+
+<Info>
+  Board-specific Buildroot `defconfig` files and Yocto BSP layers (meta layers) are available in the open-source hardware repository under the `buildroot/` and `yocto/` directories respectively. Start there rather than writing configurations from scratch.
+</Info>
+
+## Approach 3: Cloud-Init for First-Boot Configuration
+
+Cloud-init is the lightest-weight customization option. Instead of modifying the image binary, you drop a `user-data` file onto the FAT boot partition before first boot. Cloud-init reads the file on the very first startup and executes your configuration — setting hostnames, creating users, installing packages, and running arbitrary commands — before handing off to normal system initialization.
+
+This approach is ideal for fleet deployments where you want a single base image but per-device configuration applied at provisioning time.
+
+### Edit user-data on the boot partition
+
+After flashing the base image to an SD card, mount the boot partition (the small FAT partition visible on any OS) and open or create the `user-data` file:
+
+```bash
+# The boot partition mounts automatically on macOS/Windows
+# On Linux, mount it manually
+sudo mount /dev/sdX1 /mnt/boot
+sudo nano /mnt/boot/user-data
+```
+
+Paste in your cloud-config YAML:
+
+```yaml user-data
+#cloud-config
+hostname: mysbc
+
+users:
+  - name: admin
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAA... your-public-key-here
+
+packages:
+  - git
+  - python3
+  - nginx
+  - htop
+
+runcmd:
+  - echo "Custom SBC image ready" > /etc/motd
+  - systemctl enable nginx
+  - systemctl start nginx
+```
+
+Unmount the boot partition, insert the card into your board, and power on. Cloud-init runs automatically and your configuration is applied before the login prompt appears.
+
+<Tabs>
+  <Tab title="Kiosk / autostart app">
+    ```yaml user-data
+    #cloud-config
+    hostname: kiosk-01
+
+    runcmd:
+      - apt-get install -y chromium-browser unclutter
+      - mkdir -p /etc/systemd/system/getty@tty1.service.d
+      - |
+        cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<EOF
+        [Service]
+        ExecStart=
+        ExecStart=-/sbin/agetty --autologin kiosk --noclear %I $TERM
+        EOF
+      - echo "@chromium-browser --kiosk https://yourdomain.com" >> /home/kiosk/.config/lxsession/LXDE-pi/autostart
+    ```
+  </Tab>
+  <Tab title="Minimal headless server">
+    ```yaml user-data
+    #cloud-config
+    hostname: server-node-01
+
+    packages:
+      - docker.io
+      - docker-compose
+
+    runcmd:
+      - systemctl enable docker
+      - systemctl start docker
+      - usermod -aG docker admin
+      - echo "Server node provisioned on $(date)" >> /var/log/provision.log
+    ```
+  </Tab>
+</Tabs>

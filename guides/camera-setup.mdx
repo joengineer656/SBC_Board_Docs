@@ -1,0 +1,216 @@
+---
+title: "Camera Module Setup and Usage on Your SBC"
+sidebarTitle: "Camera Setup"
+description: "Connect a CSI or USB camera module to your SBC, enable the camera interface, and capture photos and video from the command line or Python."
+---
+
+Adding a camera transforms your SBC into a capable vision platform — useful for time-lapse photography, computer vision pipelines, wildlife monitoring, and video streaming projects. This guide walks you through physically attaching a CSI ribbon-cable camera module, enabling the camera stack in software, and capturing your first image and video clip. USB webcam users will find a quick-start section at the end.
+
+## Supported Cameras
+
+The board's CSI (Camera Serial Interface) connector is compatible with the following official camera modules:
+
+| Module | Resolution | Autofocus | Best For |
+|---|---|---|---|
+| Camera Module v2 | 8 MP (Sony IMX219) | Fixed focus | General photography, video |
+| Camera Module 3 | 12 MP (Sony IMX708) | Phase-detect AF | Fast-moving subjects, close-ups |
+| Camera Module 3 Wide | 12 MP (Sony IMX708) | Phase-detect AF | Wide-angle, landscape capture |
+| HQ Camera | 12.3 MP (Sony IMX477) | Interchangeable lens | Studio, scientific imaging |
+| Camera Module 3 NoIR | 12 MP (Sony IMX708) | Phase-detect AF | Night vision with IR illuminator |
+
+<Info>
+  USB webcams that expose a standard UVC (USB Video Class) interface also work out of the box via `fswebcam` and `v4l2`. See the [USB Webcam](#usb-webcam) section below for setup instructions.
+</Info>
+
+## Hardware Connection
+
+<Warning>
+  The CSI ribbon cable connector is fragile. Never insert or remove the cable while the board is powered on — doing so can permanently damage the camera module, the connector, or both. Always shut the system down completely before touching the cable.
+</Warning>
+
+<Steps>
+  <Step title="Power off the board">
+    Shut the system down gracefully and disconnect the power supply:
+
+    ```bash
+    sudo shutdown -h now
+    ```
+
+    Wait until the status LED goes dark, then unplug the USB-C power cable before proceeding.
+  </Step>
+
+  <Step title="Insert the ribbon cable">
+    Locate the CSI connector on the board — it is the small black ZIF (Zero Insertion Force) socket near the HDMI ports.
+
+    1. Pinch the two short sides of the connector latch and **gently lift** it upward. It moves only about 1–2 mm.
+    2. Slide the ribbon cable into the slot with the **blue plastic side facing toward the USB ports** (metal contacts facing away from USB).
+    3. Hold the cable straight and flat, then **press the latch back down** firmly until it clicks into place.
+    4. Give the cable a very gentle tug to confirm it is locked — it should not slide out.
+  </Step>
+
+  <Step title="Power on and verify the connection">
+    Reconnect the power supply and allow the board to boot fully. The camera module's LED (if present) should illuminate briefly during boot. Proceed to the software setup steps below to confirm the camera is detected.
+  </Step>
+</Steps>
+
+## Software Setup
+
+<Steps>
+  <Step title="Enable the camera interface">
+    Open the board's configuration file and enable the camera overlay. Add or confirm the following line is present in `/boot/config.txt`:
+
+    ```bash
+    # Open the config file
+    sudo nano /boot/config.txt
+    ```
+
+    Ensure the following line is present and **not** commented out:
+
+    ```ini /boot/config.txt
+    camera_auto_detect=1
+    ```
+
+    Save the file and reboot:
+
+    ```bash
+    sudo reboot
+    ```
+  </Step>
+
+  <Step title="Verify the camera is detected">
+    After the board reboots, run the `libcamera-hello` utility. It opens a 5-second camera preview window and exits:
+
+    ```bash
+    libcamera-hello
+    ```
+
+    You should see a live preview appear on the display and log output similar to:
+
+    ```
+    [0:00:00.527722] [1234]  INFO Camera camera_manager.cpp:284 libcamera v0.1.0
+    [0:00:00.601831] [1234]  INFO RPI vc4.cpp:447 Registered camera /base/soc/i2c0mux/...
+    Preview window: 800x600
+    ```
+
+    If the command errors with `no cameras available`, double-check the ribbon cable seating and that `camera_auto_detect=1` is set in `/boot/config.txt`.
+  </Step>
+
+  <Step title="Capture a still image">
+    Take a full-resolution JPEG photograph and save it to `test.jpg`:
+
+    ```bash
+    libcamera-still -o test.jpg
+    ```
+
+    Add `--width` and `--height` to specify a resolution, or `--quality 95` to adjust JPEG compression:
+
+    ```bash
+    libcamera-still -o test.jpg --width 1920 --height 1080 --quality 95
+    ```
+  </Step>
+
+  <Step title="Record a video clip">
+    Record a 5-second H.264 video and save it to `test.h264`:
+
+    ```bash
+    libcamera-vid -t 5000 -o test.h264
+    ```
+
+    The `-t` flag sets duration in milliseconds. To wrap the stream in an MP4 container for broader compatibility, pipe through `ffmpeg`:
+
+    ```bash
+    libcamera-vid -t 5000 --codec libav -o test.mp4
+    ```
+  </Step>
+</Steps>
+
+## Python Camera API
+
+For applications that need programmatic control — adjusting exposure, setting white balance, or integrating capture into a larger Python program — use the `picamera2` library. It ships pre-installed on the official OS image.
+
+```python capture.py
+from picamera2 import Picamera2
+
+camera = Picamera2()
+config = camera.create_still_configuration()
+camera.configure(config)
+camera.start()
+camera.capture_file("image.jpg")
+camera.stop()
+print("Image saved as image.jpg")
+```
+
+<Tabs>
+  <Tab title="Continuous capture loop">
+    ```python timelapse.py
+    from picamera2 import Picamera2
+    from time import sleep
+    import os
+
+    camera = Picamera2()
+    camera.configure(camera.create_still_configuration())
+    camera.start()
+
+    os.makedirs("timelapse", exist_ok=True)
+    for i in range(60):
+        filename = f"timelapse/frame_{i:04d}.jpg"
+        camera.capture_file(filename)
+        print(f"Saved {filename}")
+        sleep(10)  # capture every 10 seconds
+
+    camera.stop()
+    print("Timelapse complete — 60 frames captured.")
+    ```
+  </Tab>
+  <Tab title="Adjust exposure and gain">
+    ```python manual_exposure.py
+    from picamera2 import Picamera2
+
+    camera = Picamera2()
+    camera.configure(camera.create_still_configuration())
+    camera.start()
+
+    # Set exposure time to 20 ms and analogue gain to 2.0
+    camera.set_controls({
+        "ExposureTime": 20000,   # microseconds
+        "AnalogueGain": 2.0,
+        "AwbEnable": False,
+        "ColourGains": (1.5, 1.2)  # red, blue gains
+    })
+
+    camera.capture_file("manual.jpg")
+    camera.stop()
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  Install `picamera2` on a non-default image with `pip install picamera2`. On Debian-based images you can also use `sudo apt install python3-picamera2` to get the system package alongside its optional GUI dependencies.
+</Tip>
+
+## USB Webcam
+
+Any UVC-compliant USB webcam works with the board without additional drivers. Install `fswebcam` and capture a frame:
+
+```bash
+sudo apt install fswebcam
+fswebcam image.jpg
+```
+
+To specify a resolution and suppress the default banner overlay:
+
+```bash
+fswebcam -r 1280x720 --no-banner image.jpg
+```
+
+List available video devices to find your webcam's device node:
+
+```bash
+v4l2-ctl --list-devices
+```
+
+Then reference a specific device:
+
+```bash
+fswebcam -d /dev/video0 -r 1920x1080 --no-banner webcam.jpg
+```

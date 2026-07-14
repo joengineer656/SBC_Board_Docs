@@ -1,0 +1,88 @@
+---
+title: "Mechanical CAD Files and 3D Models Download"
+sidebarTitle: "CAD Files"
+description: "Download STEP, STL, DXF, and PDF mechanical files for the SBC board. Use these files to design enclosures, mounting brackets, and custom fixtures."
+---
+
+The board's full mechanical geometry is available as open-source CAD files. Use these files to design a custom enclosure, integrate the board into a larger assembly, verify clearances against existing hardware, or 3D print a mounting bracket — everything you need is available for free download.
+
+## Available Files
+
+| File | Format | Description |
+|------|--------|-------------|
+| 3D Model (STEP) | .step | Full board STEP model for enclosure design |
+| 3D Model (STL) | .stl | STL for 3D printing reference |
+| Board Outline | .dxf | 2D board outline in DXF format |
+| Mounting Template | .pdf | Printable drilling/mounting template |
+
+<Note>
+  The CAD files are released under the **Creative Commons Attribution 4.0 International (CC BY 4.0)** license. You are free to share and adapt the files for any purpose, including commercial use, as long as you give appropriate credit to the original design.
+</Note>
+
+## Board Dimensions
+
+Use the measurements below for enclosure planning and mechanical integration. All dimensions assume the board is laid flat with the component side facing up.
+
+| Dimension | Value |
+|-----------|-------|
+| Length | 85 mm |
+| Width | 56 mm |
+| Height (components) | 17 mm max |
+| Mounting hole diameter | 2.75 mm |
+| Mounting hole positions | See drawing |
+| Weight | ~45 g |
+
+## Designing an Enclosure
+
+### Key Design Considerations
+
+When designing a custom enclosure, keep the following in mind:
+
+- **Connector positions:** The USB-C power port, USB Type-A ports, HDMI connector, Ethernet jack, and 3.5mm audio jack all sit on the board edges. Route cutouts precisely — use the STEP model to confirm exact positions before finalising your enclosure geometry.
+- **Ventilation:** The SoC and power components generate heat during sustained workloads. Include ventilation slots or a fan mount above the processor area to prevent thermal throttling. A minimum of 10 mm clearance above the tallest component is recommended.
+- **Mounting hole standoffs:** The four mounting holes accept M2.5 screws. Use standoffs tall enough to clear the solder joints on the underside of the board (typically 3–5 mm).
+
+### Community Enclosures
+
+Before designing from scratch, check whether the community has already built something that fits your needs. Search for enclosures on [Printables](https://www.printables.com) and [Thingiverse](https://www.thingiverse.com) using the board name — you will often find fully parametric models ready to customise and print.
+
+### Importing the STEP File
+
+<Tabs>
+  <Tab title="FreeCAD">
+    <Steps>
+      <Step title="Open FreeCAD">
+        Launch FreeCAD and select **File → Open**.
+      </Step>
+      <Step title="Select the STEP file">
+        Navigate to the downloaded `.step` file and click **Open**. FreeCAD automatically imports it using the built-in STEP importer.
+      </Step>
+      <Step title="Switch to Part workbench">
+        Use the **Workbench** dropdown to select **Part**. You can now inspect, measure, and use the board model as a reference body when building your enclosure around it.
+      </Step>
+      <Step title="Apply a Boolean operation">
+        Create your enclosure body in the **Part Design** workbench, then use **Part → Boolean → Cut** to subtract the board volume from the enclosure shell, ensuring a precise fit.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Fusion 360">
+    <Steps>
+      <Step title="Open a new design">
+        In Fusion 360, create a new design or open an existing enclosure project.
+      </Step>
+      <Step title="Insert the STEP file">
+        Go to **Insert → Insert Mesh** or **Insert → Import** and select the `.step` file. Fusion 360 imports it as a solid body.
+      </Step>
+      <Step title="Set the origin">
+        Align the board's corner or a mounting hole to your design origin using **Modify → Align** to ensure consistent positioning relative to your enclosure geometry.
+      </Step>
+      <Step title="Design around the board">
+        With the board body in place, sketch your enclosure walls, cutouts, and mounting bosses directly over it. Use the **Inspect → Measure** tool to confirm clearances.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+<Tip>
+  Use **M2.5 brass threaded standoffs** when mounting the board inside an enclosure. Brass standoffs resist corrosion, provide a secure ground connection through the mounting holes, and are less likely to crack under torque than plastic equivalents. A standard M2.5 × 5 mm standoff with an M2.5 × 6 mm screw gives a solid fit without placing stress on the PCB.
+</Tip>

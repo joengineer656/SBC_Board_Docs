@@ -1,13 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "SBC Board",
+  "projectType": "general",
+  "projectName": "SBC Board",
+  "projectDescription": "An open-source Single Board Computer (SBC) with comprehensive hardware documentation, pin references, and software setup guides for makers, developers, and engineers.",
   "theme": "aspen",
-  "colors": {
-    "primary": "#ef7025",
-    "light": "#eec9bc",
-    "dark": "#4fa1ab"
-  },
-  "favicon": "/favicon.svg",
+  "primaryColor": "#ef7025",
+  "lightColor": "#eec9bc",
+  "darkColor": "#4fa1ab",
   "navigation": {
     "tabs": [
       {
@@ -70,17 +68,26 @@
       }
     ]
   },
-  "navbar": {
-    "links": [
-      {
-        "label": "Community",
-        "href": "https://github.com"
-      }
-    ]
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com"
-    }
-  }
+  "keyFeatures": [
+    "Open-source hardware design with publicly available schematics and CAD files",
+    "Multi-core processor support with configurable GPIO pins",
+    "Multiple connectivity options: USB, UART, SPI, I2C, Ethernet, Wi-Fi",
+    "Support for popular Linux-based operating systems",
+    "Camera and display interface (CSI/DSI)",
+    "Low-power design suitable for embedded and IoT applications",
+    "Expansion header for add-on boards and peripherals",
+    "Active open-source community and ecosystem"
+  ],
+  "publicApiSurface": [
+    "GPIO pin control via sysfs and libgpiod",
+    "SPI interface (/dev/spidev*)",
+    "I2C interface (/dev/i2c-*)",
+    "UART serial interface (/dev/ttyS*)",
+    "USB OTG and Host ports",
+    "CSI camera interface",
+    "DSI/HDMI display output",
+    "PWM channels",
+    "ADC inputs",
+    "Ethernet (GbE) and Wi-Fi networking"
+  ]
 }

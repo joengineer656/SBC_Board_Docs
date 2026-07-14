@@ -1,0 +1,179 @@
+---
+title: "USB Connectivity Guide for Your SBC"
+sidebarTitle: "USB"
+description: "Set up USB storage, serial adapters, OTG gadget mode, and Ethernet-over-USB networking on your SBC using the USB-A 3.0 and USB-C OTG ports."
+---
+
+Your SBC provides three USB ports that cover a broad range of connectivity needs: two full-size USB-A 3.0 ports for standard peripherals and a USB-C port that supports both host mode and On-The-Go (OTG) device mode. Whether you are mounting external drives, communicating with microcontrollers over serial, or turning the board itself into a USB network adapter for headless development, this guide walks you through every scenario step by step.
+
+## USB Ports Overview
+
+| Port | Type | Speed | Typical Use Case |
+|---|---|---|---|
+| USB-A (×2) | USB 3.0 Type-A | Up to 5 Gbps | Keyboards, mice, USB hubs, storage drives, USB-to-serial adapters |
+| USB-C | USB 3.0 / OTG | Up to 5 Gbps | Power input, gadget/device mode, host mode for peripherals |
+
+<Note>
+  The USB-C port shares its function between power delivery and data. When used in OTG device mode the board must be powered through another supply (GPIO header or separate USB-C power-only port if available), as the data connection occupies the port.
+</Note>
+
+## USB-C OTG Mode
+
+The USB-C port supports OTG (On-The-Go), which means the board can act either as a **host** (controlling attached USB peripherals, as a desktop computer does) or as a **device** (appearing as a peripheral to another host computer).
+
+**Check the current OTG mode:**
+
+```bash
+cat /sys/devices/platform/usb/mode
+```
+
+The output will be either `host` or `peripheral`.
+
+**Switch to device mode** (required for USB gadget networking and other device-side functions):
+
+```bash
+echo peripheral | sudo tee /sys/devices/platform/usb/mode
+```
+
+**Switch back to host mode:**
+
+```bash
+echo host | sudo tee /sys/devices/platform/usb/mode
+```
+
+To make the mode persistent across reboots, add the appropriate `otg_mode` setting to `/boot/config.txt`:
+
+```ini
+# For permanent device (peripheral) mode:
+dtoverlay=dwc2,dr_mode=peripheral
+
+# For permanent host mode:
+dtoverlay=dwc2,dr_mode=host
+```
+
+## USB Storage
+
+When you plug in a USB flash drive or external hard disk, the kernel enumerates the device immediately. Many desktop Linux images auto-mount storage under `/media/` or `/run/media/`. For headless (server) images you typically mount manually.
+
+**List all attached block devices to find the device node:**
+
+```bash
+lsblk
+```
+
+**Mount the first partition of the drive:**
+
+```bash
+sudo mount /dev/sda1 /mnt/usb
+```
+
+**Browse and use the files:**
+
+```bash
+ls /mnt/usb
+cp /home/admin/myfile.txt /mnt/usb/
+```
+
+**Unmount safely before unplugging:**
+
+```bash
+sudo umount /mnt/usb
+```
+
+To mount a drive automatically at boot, add an entry to `/etc/fstab`:
+
+```bash
+# Find the UUID of the partition
+sudo blkid /dev/sda1
+
+# Add to /etc/fstab (replace UUID with yours)
+UUID=1234-ABCD  /mnt/usb  vfat  defaults,nofail  0  2
+```
+
+<Warning>
+  Always unmount a USB storage device before physically removing it. Unplugging while a write is in progress can corrupt the filesystem, particularly on FAT32-formatted drives.
+</Warning>
+
+## USB Serial Devices
+
+USB-to-serial adapters (CP2102, CH340, FTDI) appear as `/dev/ttyUSB0`, `/dev/ttyUSB1`, etc. The numeric suffix depends on enumeration order and can change between reboots, which makes scripting unreliable. Use udev rules to assign a stable, human-readable name.
+
+**Check which device node was assigned after plugging in the adapter:**
+
+```bash
+dmesg | tail -20
+ls /dev/ttyUSB*
+```
+
+**Create a udev rule for stable naming:**
+
+```bash
+sudo nano /etc/udev/rules.d/99-usb-serial.rules
+```
+
+Add the following, replacing `idVendor` and `idProduct` with the values from `lsusb`:
+
+```
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+  SYMLINK+="ttyMyDevice", MODE="0666"
+```
+
+Reload the rules and re-plug the device:
+
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+Your adapter now appears as both `/dev/ttyUSB0` and the stable symlink `/dev/ttyMyDevice`.
+
+**Communicate with the device using `minicom`:**
+
+```bash
+sudo apt install minicom
+minicom -D /dev/ttyUSB0 -b 115200
+```
+
+## USB Gadget Mode (Ethernet over USB)
+
+Gadget mode lets the board present itself to a connected PC as a USB network adapter. This is the fastest way to get a headless SBC online for initial configuration without needing a router, monitor, or Wi-Fi credentials.
+
+<Steps>
+  <Step title="Load the g_ether gadget module">
+    ```bash
+    sudo modprobe g_ether
+    ```
+
+    To load the module automatically at every boot, add it to the modules list:
+
+    ```bash
+    echo "g_ether" | sudo tee -a /etc/modules
+    ```
+  </Step>
+  <Step title="Connect the board to your PC via USB-C">
+    Use a data-capable USB-C cable (not a charge-only cable). On your PC, a new network adapter named something like **Linux USB Ethernet** or **RNDIS Gadget** appears within a few seconds.
+  </Step>
+  <Step title="Assign an IP address on the PC">
+    Set the USB network interface on your PC to a static IP in the `192.168.7.x` subnet — for example `192.168.7.1/24`. The board defaults to `192.168.7.2`.
+
+    On Linux PC:
+
+    ```bash
+    sudo ip addr add 192.168.7.1/24 dev usb0
+    sudo ip link set usb0 up
+    ```
+
+    On macOS, open **System Preferences → Network**, select the RNDIS interface, and set a manual IP of `192.168.7.1` with subnet `255.255.255.0`.
+  </Step>
+  <Step title="SSH into the board over USB">
+    ```bash
+    ssh admin@192.168.7.2
+    ```
+
+    You now have a full shell on the board without any Wi-Fi or Ethernet connection.
+  </Step>
+</Steps>
+
+<Tip>
+  When connecting multiple high-power USB devices simultaneously — such as an SSD, a USB hub, and a Wi-Fi dongle — use a **powered USB hub** with its own AC adapter. The USB-A ports on the SBC supply a combined current budget; exceeding it causes devices to drop off, produce kernel errors, or behave erratically. A powered hub offloads that current demand to the wall outlet instead of the board.
+</Tip>

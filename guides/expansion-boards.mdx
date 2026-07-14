@@ -1,0 +1,283 @@
+---
+title: "Using Expansion Boards and HATs with Your SBC"
+sidebarTitle: "Expansion Boards"
+description: "Attach HATs and expansion boards to your SBC's 40-pin GPIO header, enable device tree overlays, and control motors, relays, displays, and more."
+---
+
+The 40-pin GPIO header on your SBC follows the HAT (Hardware Attached on Top) standard — an open specification that defines the mechanical footprint, electrical interface, and EEPROM-based auto-configuration protocol for add-on boards. Any HAT built to this standard physically stacks on top of the board via the header and exposes additional capabilities: motor drivers, relay channels, high-fidelity audio, e-ink screens, environmental sensors, and more. This guide covers how to select, install, and configure expansion boards for your project.
+
+## HAT Compatibility
+
+### EEPROM Auto-Configuration
+
+Compliant HATs contain a small EEPROM chip that stores a device tree fragment and vendor metadata. On boot, the firmware reads this EEPROM over a dedicated I2C address and automatically loads the correct device tree overlay, so the HAT's hardware becomes available without any manual configuration in most cases.
+
+To check whether a detected HAT has been auto-configured, inspect the HAT overlay node after boot:
+
+```bash
+cat /proc/device-tree/hat/product 2>/dev/null || echo "No HAT EEPROM detected"
+cat /proc/device-tree/hat/vendor 2>/dev/null
+```
+
+### Compatible HAT Categories
+
+<CardGroup cols={2}>
+  <Card title="Motor & Servo HATs" icon="gear">
+    Control DC motors, stepper motors, and RC servos over I2C. Typically based on the PCA9685 PWM controller or DRV8833/TB6612 motor drivers. Popular for robotics and CNC projects.
+  </Card>
+  <Card title="Relay HATs" icon="toggle-on">
+    Switch mains-voltage or high-current loads via optically isolated relay channels. Common for home automation, industrial control, and smart irrigation.
+  </Card>
+  <Card title="Display HATs" icon="display">
+    Attach e-ink (e-paper) or small TFT/IPS LCD displays directly to the header. Communicate over SPI. Great for dashboards, price tags, and low-power signage.
+  </Card>
+  <Card title="Audio DAC HATs" icon="music">
+    High-quality stereo audio output over I2S, bypassing the board's built-in PWM audio. Popular brands include HiFiBerry, IQaudio, and JustBoom.
+  </Card>
+  <Card title="Sensor HATs" icon="thermometer">
+    Combine multiple sensors (BME280 for temperature/humidity/pressure, LSM6DS3 IMU for motion, LTR-559 light sensor) on a single board. Ideal for environmental monitoring.
+  </Card>
+  <Card title="UPS & Battery HATs" icon="battery-full">
+    Provide uninterruptible power via LiPo or Li-Ion cells with integrated charging. Protect the board against unexpected power loss and enable portable operation.
+  </Card>
+</CardGroup>
+
+<Warning>
+  The 3.3 V rail on the 40-pin header is rated for a maximum of **50 mA** of total sourced current, and the 5 V rail is limited by your power supply minus the board's own consumption. When stacking multiple HATs or powering external peripherals from the header, add up all load currents and verify you are within budget. Exceeding the rail limits can cause voltage drops, SD card corruption, or permanent damage to the board's power regulator. Use a quality USB-C power supply rated for at least 3 A when using power-hungry HATs.
+</Warning>
+
+## Installing a HAT
+
+<Steps>
+  <Step title="Power off the board completely">
+    Never attach or detach a HAT while the board is powered. Shut down gracefully first:
+
+    ```bash
+    sudo shutdown -h now
+    ```
+
+    Wait for the status LED to go dark, then unplug the power cable.
+  </Step>
+
+  <Step title="Align and seat the HAT">
+    Hold the HAT above the board and align its 40-pin female header with the board's 40-pin male header. The HAT's PCB should hang over the same side of the board as the GPIO header.
+
+    Press down evenly on both sides of the HAT until the header is fully seated. All 40 pins should be engaged — partial seating is the most common cause of intermittent HAT failures.
+
+    If your HAT includes standoffs and screws, fasten them now to prevent the connector from working loose under vibration.
+  </Step>
+
+  <Step title="Reconnect power and check auto-detection">
+    Plug the power supply back in and allow the board to boot. Check whether the HAT's EEPROM was detected and its overlay loaded automatically:
+
+    ```bash
+    # Check dmesg for HAT-related messages
+    dmesg | grep -i "hat\|overlay\|eeprom"
+
+    # List loaded overlays
+    dtoverlay -l
+    ```
+
+    If your HAT does not include an EEPROM, proceed to the next step to load the overlay manually.
+  </Step>
+
+  <Step title="Enable the device tree overlay manually (if required)">
+    Open `/boot/config.txt` and add the appropriate `dtoverlay` line for your HAT. Save the file and reboot.
+
+    ```bash
+    sudo nano /boot/config.txt
+    ```
+
+    ```ini /boot/config.txt
+    # Example: enable I2C for a motor HAT
+    dtparam=i2c_arm=on
+
+    # Example: enable SPI for a display HAT
+    dtparam=spi=on
+
+    # Example: enable a specific HAT overlay
+    dtoverlay=hifiberry-dacplus
+    ```
+
+    ```bash
+    sudo reboot
+    ```
+  </Step>
+</Steps>
+
+## Popular HAT Configurations
+
+<Accordion title="Motor HAT — DC and Stepper Motor Control">
+  Most motor HATs use the PCA9685 I2C PWM controller combined with motor driver ICs. Enable I2C first, then install the Adafruit CircuitPython Motor library:
+
+  ```bash
+  # Confirm I2C is enabled and the HAT is detected at address 0x60
+  sudo apt install -y i2c-tools
+  i2cdetect -y 1
+  ```
+
+  Install the motor library:
+
+  ```bash
+  pip3 install adafruit-circuitpython-motorkit
+  ```
+
+  Control a DC motor:
+
+  ```python motor_control.py
+  from adafruit_motorkit import MotorKit
+
+  kit = MotorKit()  # defaults to I2C address 0x60
+
+  # Run motor 1 forward at 75% throttle
+  kit.motor1.throttle = 0.75
+
+  import time
+  time.sleep(2)
+
+  # Stop the motor
+  kit.motor1.throttle = 0
+  print("Motor stopped.")
+  ```
+
+  To control a stepper motor:
+
+  ```python stepper_control.py
+  from adafruit_motorkit import MotorKit
+  from adafruit_motor import stepper
+
+  kit = MotorKit()
+
+  # Step 200 times (one full revolution for a 200-step motor)
+  for _ in range(200):
+      kit.stepper1.onestep(direction=stepper.FORWARD, style=stepper.SINGLE)
+
+  kit.stepper1.release()
+  print("Stepper complete.")
+  ```
+</Accordion>
+
+<Accordion title="Relay HAT — Switching High-Voltage Loads">
+  Relay HATs typically expose each relay channel as a GPIO output. Pulling the pin HIGH or LOW energizes or de-energizes the relay coil (check your HAT's datasheet — active-low vs active-high varies between products).
+
+  ```python relay_control.py
+  from gpiozero import OutputDevice
+  from time import sleep
+
+  # Map relay channels to GPIO pins (check your HAT's pinout)
+  RELAY_PINS = {
+      1: OutputDevice(26, active_high=False, initial_value=False),
+      2: OutputDevice(20, active_high=False, initial_value=False),
+      3: OutputDevice(21, active_high=False, initial_value=False),
+      4: OutputDevice(16, active_high=False, initial_value=False),
+  }
+
+  # Turn relay 1 on for 3 seconds, then off
+  print("Relay 1 ON")
+  RELAY_PINS[1].on()
+  sleep(3)
+  RELAY_PINS[1].off()
+  print("Relay 1 OFF")
+
+  # Sequence through all channels
+  for ch, relay in RELAY_PINS.items():
+      print(f"Channel {ch} ON")
+      relay.on()
+      sleep(0.5)
+      relay.off()
+  ```
+
+  <Warning>
+    Never use relay HATs to switch live mains voltage unless your HAT is rated and certified for that purpose and you are qualified to work with high voltages. Always de-energize circuits before wiring relay outputs.
+  </Warning>
+</Accordion>
+
+<Accordion title="e-ink Display HAT — Low-Power Screen">
+  e-ink displays communicate over SPI. Enable SPI in `/boot/config.txt` before proceeding:
+
+  ```ini /boot/config.txt
+  dtparam=spi=on
+  ```
+
+  Install the Waveshare e-Paper library (or your HAT vendor's equivalent):
+
+  ```bash
+  pip3 install waveshare-epd
+  # Or clone the vendor's library
+  git clone https://github.com/waveshare/e-Paper.git
+  ```
+
+  Display text and a simple image on a 2.13-inch e-ink panel:
+
+  ```python eink_display.py
+  from waveshare_epd import epd2in13_V3
+  from PIL import Image, ImageDraw, ImageFont
+
+  epd = epd2in13_V3.EPD()
+  epd.init()
+  epd.Clear()
+
+  # Create a blank canvas (width × height in landscape)
+  image = Image.new("1", (epd.height, epd.width), 255)  # 255 = white
+  draw = ImageDraw.Draw(image)
+
+  # Draw text
+  font = ImageFont.load_default()
+  draw.text((10, 10), "Hello, SBC!", font=font, fill=0)
+  draw.text((10, 30), "e-ink display ready.", font=font, fill=0)
+
+  # Push to display
+  epd.display(epd.getbuffer(image))
+  epd.sleep()
+  print("Display updated.")
+  ```
+
+  <Tip>
+    Call `epd.sleep()` after every update. e-ink displays draw negligible current in sleep mode, making them ideal for battery-powered applications that only refresh occasionally.
+  </Tip>
+</Accordion>
+
+## Building Your Own HAT
+
+If no off-the-shelf HAT meets your requirements, the HAT specification makes it straightforward to design your own.
+
+### HAT Specification
+
+The mechanical and electrical requirements for compliant HATs are defined in the official [HAT specification document](https://github.com/raspberrypi/hats). Key requirements include:
+
+- 40-pin female header at the specified position
+- PCB dimensions: 65 mm × 56.5 mm maximum
+- 2.5 mm mounting holes at the four defined corner positions
+- 24C32 or compatible I2C EEPROM at address 0x50 for auto-configuration
+
+### EEPROM Programming
+
+Auto-configuration requires programming the HAT's EEPROM with a device tree overlay blob and vendor metadata. Use the `hat-eeprom-tools` utility from the official repository:
+
+```bash
+git clone https://github.com/raspberrypi/hats.git
+cd hats/eepromutils
+
+# Edit eeprom_settings.txt with your HAT's details
+nano eeprom_settings.txt
+
+# Compile the settings into a binary blob
+./eepmake eeprom_settings.txt myhat.eep
+
+# Flash to the EEPROM (connect WP pin to GND to allow writes)
+./eepflash.sh -w -f=myhat.eep -t=24c32
+```
+
+### KiCad Design Template
+
+A KiCad schematic and PCB layout template that includes the correct header footprint, mounting hole positions, EEPROM circuit, and edge cuts is available in the `hardware/hat-template/` directory of the open-source board repository. Clone the repo and open the template as a starting point for your own HAT design:
+
+```bash
+git clone https://github.com/<your-org>/<board-repo>.git
+cd <board-repo>/hardware/hat-template
+# Open myhat.kicad_pro in KiCad 7 or later
+```
+
+<Info>
+  The template includes a BOM (bill of materials) with LCSC part numbers for the EEPROM and decoupling capacitors, making it straightforward to order from JLCPCB or PCBWay with parts assembled.
+</Info>

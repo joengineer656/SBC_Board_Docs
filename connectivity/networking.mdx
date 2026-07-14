@@ -1,0 +1,309 @@
+---
+title: "Networking Setup: Ethernet, Wi-Fi, and Bluetooth"
+sidebarTitle: "Networking"
+description: "Connect your SBC over Ethernet or Wi-Fi, pair Bluetooth devices, set up SSH key authentication, and create a wireless hotspot with NetworkManager."
+---
+
+Your SBC ships with built-in Gigabit Ethernet, dual-band Wi-Fi, and Bluetooth, giving you flexible options for wired and wireless connectivity out of the box. NetworkManager handles all three interfaces on modern images and provides a consistent command-line tool — `nmcli` — that lets you scan for networks, create connection profiles, and set static addresses without editing config files by hand. This guide covers each interface in detail, followed by instructions for hardening remote SSH access.
+
+<Tabs>
+  <Tab title="Ethernet">
+    ## Connecting via Ethernet
+
+    Plug an Ethernet cable into the RJ-45 port. NetworkManager detects the link and requests a DHCP lease automatically — no additional configuration is needed for most home or office networks.
+
+    **Verify the connection and view your assigned IP address:**
+
+    ```bash
+    ip addr show eth0
+    ```
+
+    Look for an `inet` line such as `inet 192.168.1.42/24`. If no address appears after 10–15 seconds, try:
+
+    ```bash
+    sudo nmcli dev status
+    ```
+
+    The `eth0` device should show a state of **connected**.
+
+    **Test connectivity:**
+
+    ```bash
+    ping -c 4 8.8.8.8
+    ```
+
+    ## Setting a Static IP Address
+
+    A static IP is useful when you need the board to always be reachable at the same address — for example, when running a local server or when your router does not support DHCP reservations.
+
+    ```bash
+    # Create a new Ethernet connection profile with a static address
+    sudo nmcli con add type ethernet ifname eth0 \
+        con-name "static-eth0" \
+        ip4 192.168.1.100/24 \
+        gw4 192.168.1.1
+
+    # Set DNS servers on the profile
+    sudo nmcli con mod "static-eth0" \
+        ipv4.dns "8.8.8.8 8.8.4.4" \
+        ipv4.method manual
+
+    # Bring the connection up
+    sudo nmcli con up "static-eth0"
+    ```
+
+    Verify the new address is active:
+
+    ```bash
+    ip addr show eth0
+    ```
+
+    To revert to DHCP, delete the static profile and reconnect:
+
+    ```bash
+    sudo nmcli con delete "static-eth0"
+    sudo nmcli dev connect eth0
+    ```
+  </Tab>
+
+  <Tab title="Wi-Fi">
+    ## Scanning for Networks
+
+    List all visible Wi-Fi access points and their signal strength:
+
+    ```bash
+    sudo nmcli dev wifi list
+    ```
+
+    If the list is stale, force a fresh scan first:
+
+    ```bash
+    sudo nmcli dev wifi rescan
+    sudo nmcli dev wifi list
+    ```
+
+    ## Connecting to a Network
+
+    Replace `SSID` and `password` with your network credentials:
+
+    ```bash
+    sudo nmcli dev wifi connect "SSID" password "password"
+    ```
+
+    NetworkManager saves this profile and reconnects automatically on every boot. View all saved connection profiles:
+
+    ```bash
+    nmcli con show
+    ```
+
+    **Check the current Wi-Fi connection status:**
+
+    ```bash
+    nmcli dev status
+    ip addr show wlan0
+    ```
+
+    ## Disconnecting
+
+    ```bash
+    sudo nmcli dev disconnect wlan0
+    ```
+
+    To delete a saved network profile entirely so the board no longer auto-connects to it:
+
+    ```bash
+    sudo nmcli con delete "SSID"
+    ```
+
+    ## Creating a Wi-Fi Hotspot
+
+    Turn the board into an access point that other devices can join. This is useful for field deployments where no existing network is available:
+
+    ```bash
+    sudo nmcli dev wifi hotspot \
+        ifname wlan0 \
+        ssid MySBC \
+        password mypassword
+    ```
+
+    The board assigns itself `10.42.0.1` and hands out addresses to clients via a built-in DHCP server. Other devices connect to **MySBC** with password **mypassword** and can reach the board at `10.42.0.1`.
+
+    Stop the hotspot and return to client mode:
+
+    ```bash
+    sudo nmcli con down Hotspot
+    sudo nmcli dev wifi connect "SSID" password "password"
+    ```
+
+    <Tip>
+      The same radio cannot simultaneously be a client on one network and an access point. If you need both functions at once (e.g. bridging an upstream Wi-Fi connection to local clients), connect to the upstream network over Ethernet and use Wi-Fi exclusively as the hotspot interface.
+    </Tip>
+  </Tab>
+
+  <Tab title="Bluetooth">
+    ## Using bluetoothctl
+
+    `bluetoothctl` is the interactive Bluetooth manager included with BlueZ. Start it from a terminal:
+
+    ```bash
+    bluetoothctl
+    ```
+
+    You will see a `[bluetooth]#` prompt. All commands below are entered at that prompt.
+
+    **Power on the Bluetooth controller and start scanning:**
+
+    ```
+    power on
+    agent on
+    scan on
+    ```
+
+    Discovered devices appear in real time with their MAC addresses and names. When you see your target device, stop the scan and pair:
+
+    ```
+    scan off
+    pair AA:BB:CC:DD:EE:FF
+    connect AA:BB:CC:DD:EE:FF
+    trust AA:BB:CC:DD:EE:FF
+    ```
+
+    `trust` makes the connection persist across reboots. Exit `bluetoothctl` with:
+
+    ```
+    quit
+    ```
+
+    **Non-interactive one-liner for connecting to a known device:**
+
+    ```bash
+    bluetoothctl -- connect AA:BB:CC:DD:EE:FF
+    ```
+
+    ## BLE Scanning with Python (bleak)
+
+    For Bluetooth Low Energy (BLE) devices — sensors, beacons, fitness trackers — use the `bleak` library:
+
+    ```bash
+    pip3 install bleak
+    ```
+
+    ```python
+    import asyncio
+    from bleak import BleakScanner
+
+    async def scan():
+        print("Scanning for BLE devices for 5 seconds...")
+        devices = await BleakScanner.discover(timeout=5.0)
+        for device in devices:
+            print(f"  {device.address}  RSSI: {device.rssi} dBm  Name: {device.name}")
+
+    asyncio.run(scan())
+    ```
+
+    To connect to a BLE device and read a characteristic:
+
+    ```python
+    import asyncio
+    from bleak import BleakClient
+
+    DEVICE_ADDRESS = "AA:BB:CC:DD:EE:FF"
+    # Standard BLE Battery Level characteristic UUID
+    BATTERY_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
+
+    async def read_battery():
+        async with BleakClient(DEVICE_ADDRESS) as client:
+            value = await client.read_gatt_char(BATTERY_UUID)
+            print(f"Battery level: {value[0]}%")
+
+    asyncio.run(read_battery())
+    ```
+  </Tab>
+</Tabs>
+
+## SSH Remote Access
+
+SSH lets you control your SBC remotely from any computer on the same network — or over the internet if the board is exposed publicly. The SSH server (`openssh-server`) is enabled by default on most SBC images.
+
+**Connect from another machine:**
+
+```bash
+ssh admin@192.168.1.100
+```
+
+Replace `admin` with your board's username and `192.168.1.100` with its IP address.
+
+### Setting Up SSH Key Authentication
+
+Password authentication is convenient but less secure. Key-based authentication is strongly recommended, especially for remote access.
+
+<Steps>
+  <Step title="Generate an SSH key pair on your local machine">
+    Run this on your laptop or desktop — not on the board:
+
+    ```bash
+    ssh-keygen -t ed25519 -C "my-sbc-key"
+    ```
+
+    Accept the default path (`~/.ssh/id_ed25519`) and set a passphrase when prompted.
+  </Step>
+  <Step title="Copy the public key to the board">
+    The `ssh-copy-id` command appends your public key to the board's `~/.ssh/authorized_keys` file automatically:
+
+    ```bash
+    ssh-copy-id -i ~/.ssh/id_ed25519.pub admin@192.168.1.100
+    ```
+
+    Enter the board's password once when prompted.
+  </Step>
+  <Step title="Verify key-based login works">
+    ```bash
+    ssh -i ~/.ssh/id_ed25519 admin@192.168.1.100
+    ```
+
+    You should be logged in without being asked for a password.
+  </Step>
+  <Step title="Disable password authentication (optional but recommended)">
+    Once key login is confirmed, edit the SSH daemon config on the board:
+
+    ```bash
+    sudo nano /etc/ssh/sshd_config
+    ```
+
+    Set the following options:
+
+    ```
+    PasswordAuthentication no
+    PubkeyAuthentication yes
+    ```
+
+    Restart the SSH service to apply:
+
+    ```bash
+    sudo systemctl restart ssh
+    ```
+  </Step>
+</Steps>
+
+**Manually manage authorized keys** (alternative to `ssh-copy-id`):
+
+```bash
+# On the board, create the .ssh directory with correct permissions
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+
+# Paste your public key into authorized_keys
+nano ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+<Note>
+  If your board is accessible from the internet, install **fail2ban** to automatically block IP addresses that repeatedly fail SSH authentication:
+
+  ```bash
+  sudo apt install fail2ban
+  sudo systemctl enable --now fail2ban
+  ```
+
+  The default configuration bans an IP for 10 minutes after 5 failed login attempts within 10 minutes. Review `/etc/fail2ban/jail.conf` to tighten or relax these thresholds for your threat model.
+</Note>

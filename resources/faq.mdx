@@ -1,0 +1,183 @@
+---
+title: "Frequently Asked Questions About the SBC Board"
+sidebarTitle: "FAQ"
+description: "Answers to the most common questions about the SBC board, covering setup, hardware specs, software, connectivity, and open-source licensing."
+---
+
+This page collects answers to the questions asked most often by the community. If you do not find what you are looking for here, check the [troubleshooting guide](/resources/troubleshooting) or open a discussion on GitHub Issues.
+
+## Getting Started
+
+<Accordion title="What's the difference between the board variants?">
+  The board is available in three RAM configurations: **2 GB, 4 GB, and 8 GB** of LPDDR4X memory. All variants share the same SoC, PCB layout, and feature set — the only difference is the amount of RAM soldered to the board.
+
+  - **2 GB** — suitable for headless server workloads, IoT projects, and lightweight desktop use.
+  - **4 GB** — the most popular choice; handles a full desktop environment, light compilation, and most hobby projects comfortably.
+  - **8 GB** — recommended if you plan to run memory-intensive workloads such as large language models, multiple containers, or a heavy desktop with many browser tabs open.
+
+  You cannot upgrade the RAM after purchase because it is soldered directly to the board.
+</Accordion>
+
+<Accordion title="Which power supply should I use?">
+  Use a **5V / 3A USB-C power supply** capable of delivering at least **15 W**. A power supply that cannot sustain 3A under load will cause voltage drops, random reboots, and the low-voltage throttling warning.
+
+  Look for a supply that supports **USB Power Delivery (USB-PD)** or is explicitly rated as a fixed 5V/3A adapter. Laptop chargers that only output 9V, 12V, or 20V via USB-PD will not work correctly — the board negotiates a 5V contract, but a supply that cannot deliver 5V at 3A will be insufficient.
+
+  Avoid phone chargers rated below 2A, USB ports on computers (limited to 0.5–0.9A), and cheap unbranded adapters with inaccurate output ratings.
+</Accordion>
+
+<Accordion title="What microSD card do I need?">
+  You need a microSD card rated **Class 10** or **UHS-I (U1)** or faster, with a minimum capacity of **16 GB**. A **32 GB or larger** card is strongly recommended to give you room for OS updates, packages, and project files without constantly running out of space.
+
+  For the best experience, choose a card from a reputable brand (Samsung, SanDisk, Kingston) and prefer **A1 or A2 application performance class** cards. These are optimised for the random read/write patterns that an OS workload produces, and they noticeably improve boot times and overall responsiveness compared to standard cards.
+
+  Avoid counterfeit or unbranded cards — they often report false capacities and fail under sustained write workloads.
+</Accordion>
+
+<Accordion title="Can I use this board without a monitor (headless mode)?">
+  Yes. The board supports fully headless operation over **SSH**. After flashing your OS image, edit the `network-config` file on the boot partition to pre-configure your Wi-Fi credentials, or connect via Ethernet directly to your router. The board will receive an IP address from DHCP, which you can then look up in your router's client list or using a network scanner such as `nmap` or the `arp-scan` tool.
+
+  Once you have the IP address, connect with:
+
+  ```bash
+  ssh your-username@<board-ip-address>
+  ```
+
+  Some OS images also support **mDNS** (Avahi/Bonjour), allowing you to connect by hostname (e.g., `ssh user@sbc.local`) without needing to find the IP address first.
+</Accordion>
+
+---
+
+## Hardware
+
+<Accordion title="Why are my GPIO pins outputting 3.3V instead of 5V?">
+  This is by design. All GPIO pins on this board operate at **3.3V logic levels**. The SoC's I/O voltage is 3.3V, so `HIGH` means 3.3V and `LOW` means 0V. There are no 5V-tolerant GPIO pins.
+
+  If your project was originally designed for a 5V microcontroller (such as an Arduino Uno), you will need to account for the different logic level when connecting to sensors, displays, or other peripherals.
+</Accordion>
+
+<Accordion title="Can I connect a 5V sensor or module to the GPIO pins?">
+  **Do not connect a 5V signal directly to a GPIO pin.** Applying 5V to a 3.3V GPIO input will exceed the SoC's maximum rated input voltage and can permanently damage the chip.
+
+  To interface a 5V peripheral safely, use a **bi-directional logic level converter** (also called a level shifter). Affordable modules based on the BSS138 MOSFET are widely available and work well for I²C and general digital I/O. For UART connections, a simple resistor voltage divider on the incoming 5V signal line is also sufficient.
+</Accordion>
+
+<Accordion title="Is there any onboard storage besides the microSD card?">
+  The microSD card slot is the primary storage interface on the base board. An optional **eMMC module** is available separately as an add-on accessory. The eMMC module plugs into a dedicated connector on the board and provides significantly faster and more reliable storage than microSD — it is the recommended choice for production or always-on deployments.
+
+  The board does not have onboard NAND flash or SSD. You can also attach USB storage (USB drives, USB SSDs) for additional capacity or as a boot device.
+</Accordion>
+
+<Accordion title="What is the maximum current I can draw from GPIO pins?">
+  Each GPIO pin can source or sink a maximum of **16 mA**. The total current across **all GPIO pins simultaneously** must not exceed **50 mA**.
+
+  Exceeding these limits risks damaging the SoC. For driving loads that require more current — such as LEDs at full brightness, relays, or motors — use a transistor, MOSFET, or a dedicated driver IC. Never connect a DC motor directly to a GPIO pin.
+</Accordion>
+
+---
+
+## Software
+
+<Accordion title="Which operating system should I start with?">
+  Start with the **official board image** based on Ubuntu or Debian, available from the downloads page. The official image is pre-configured with the correct kernel, firmware, device tree overlays, and hardware accelerated drivers for this board. It gives you the smoothest out-of-the-box experience.
+
+  Generic ARM64 Ubuntu or Debian images from Canonical or Debian.org will not include board-specific drivers and are likely to be missing functionality such as hardware video decoding, GPIO support, or correct USB behaviour. Use the official image unless you have a specific reason not to.
+</Accordion>
+
+<Accordion title="How do I update the bootloader?">
+  Update the bootloader by running the following commands in a terminal on the board:
+
+  ```bash
+  sudo apt update && sudo apt install sbc-bootloader
+  ```
+
+  After installation, reboot the board to activate the new bootloader. The package manager handles writing the updated bootloader to the correct partition automatically — you do not need to manually flash anything.
+
+  Check the current bootloader version at any time with:
+
+  ```bash
+  sbc-bootloader --version
+  ```
+</Accordion>
+
+<Accordion title="Does the board support Docker?">
+  Yes. Docker works on this board using the standard installation script from Docker's official documentation:
+
+  ```bash
+  curl -fsSL https://get.docker.com | sh
+  sudo usermod -aG docker $USER
+  ```
+
+  Log out and back in after adding yourself to the `docker` group. Because the board runs a 64-bit ARM (aarch64) architecture, make sure the container images you pull have an `arm64` or `linux/arm64` variant. Most popular images on Docker Hub include ARM64 support.
+</Accordion>
+
+<Accordion title="Can I run a full desktop environment?">
+  Yes. You can install a desktop environment on top of the server image or download the pre-built desktop image directly from the downloads page.
+
+  To install on a running server image:
+
+  ```bash
+  sudo apt update
+  sudo apt install ubuntu-desktop
+  ```
+
+  For a lighter desktop, consider **XFCE** (`xubuntu-desktop`) or **LXQt** (`lubuntu-desktop`). The 4 GB and 8 GB RAM variants handle a full desktop environment comfortably; the 2 GB variant works best with a lightweight desktop.
+</Accordion>
+
+---
+
+## Connectivity
+
+<Accordion title="How do I connect to the board over USB when there's no Wi-Fi or Ethernet?">
+  The board supports **USB gadget mode**, which makes it appear as a USB Ethernet adapter when connected to a host computer via the USB-C port. This creates a direct point-to-point network link without requiring any external networking infrastructure.
+
+  Enable USB gadget mode by adding `dtoverlay=dwc2` and `modules-load=dwc2,g_ether` to the appropriate config and cmdline files on the boot partition before first boot, or by installing the `usb-gadget` package on a running system. Once active, the board gets the fixed IP `192.168.7.2` and you can SSH in from your host computer at that address.
+</Accordion>
+
+<Accordion title="My Wi-Fi connection drops frequently — how do I fix it?">
+  Frequent Wi-Fi drops are most often caused by the kernel's **Wi-Fi power management** feature, which puts the wireless interface into a low-power sleep state to save energy. Disable it with:
+
+  ```bash
+  sudo iw dev wlan0 set power_save off
+  ```
+
+  To make this setting persist across reboots, create a `NetworkManager` configuration file:
+
+  ```bash
+  sudo bash -c 'cat > /etc/NetworkManager/conf.d/wifi-powersave-off.conf << EOF
+  [connection]
+  wifi.powersave = 2
+  EOF'
+  sudo systemctl restart NetworkManager
+  ```
+
+  If drops continue after disabling power management, check for interference from nearby 2.4 GHz devices and consider switching to the 5 GHz band.
+</Accordion>
+
+---
+
+## Open Source
+
+<Accordion title="Where can I find all the source files?">
+  All source files — including hardware schematics, PCB layouts, firmware, and OS build scripts — are hosted on the project's **GitHub repository**. Visit the repository to browse files, download releases, read the contribution guidelines, and track ongoing development.
+
+  Direct links to specific file categories are also available on the [Schematics](/resources/schematics) and [CAD Files](/resources/cad-files) pages.
+</Accordion>
+
+<Accordion title="Can I manufacture and sell my own version of this board?">
+  Yes. The hardware design is released under **CERN-OHL-P v2**, a permissive open-source hardware license that explicitly permits commercial manufacturing and sales. You are free to fabricate the board, modify the design, and sell the resulting products.
+
+  The main requirement is **attribution**: you must retain the original copyright notice and license text, and clearly indicate if you have made modifications to the design. You do not need to release derivative designs under the same license (it is a permissive, not a copyleft, license).
+
+  Review the full CERN-OHL-P v2 license text for the complete terms before manufacturing.
+</Accordion>
+
+<Accordion title="How do I contribute to the project?">
+  Contributions are welcome. The preferred way to contribute is through the **GitHub repository**:
+
+  - **Bug reports:** Open a GitHub Issue describing the problem, the steps to reproduce it, and the OS image and board revision you are using.
+  - **Feature requests:** Open a GitHub Issue with the `enhancement` label and describe the use case.
+  - **Code or design changes:** Fork the repository, make your changes on a feature branch, and open a Pull Request. Read the `CONTRIBUTING.md` file in the repository for coding style guidelines, commit message conventions, and the review process.
+
+  For discussions and questions that are not formal bug reports, use the GitHub Discussions tab or the community forum.
+</Accordion>

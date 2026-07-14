@@ -15,11 +15,7 @@
         "groups": [
           {
             "group": "Get Started",
-            "pages": [
-              "introduction",
-              "quickstart",
-              "hardware-overview"
-            ]
+            "pages": []
           },
           {
             "group": "Hardware",

@@ -1,5 +1,5 @@
 ---
-title: "Display and Audio Setup on Your SBC"
+title: "Configuring HDMI, DSI Display, and Audio on Your SBC"
 sidebarTitle: "Display & Audio"
 description: "Configure HDMI resolution, DSI touchscreen panels, ALSA audio output, and I2S DAC HATs to add display and sound to your SBC projects."
 ---
@@ -119,7 +119,7 @@ The DSI (Display Serial Interface) connector on the board provides a high-speed 
 </Steps>
 
 <Note>
-  Touch input is handled automatically through the I2C bus when using the official DSI touchscreen. You do not need to install a separate driver. If touch is unresponsive after enabling the overlay, verify that I2C is enabled in `raspi-config` (see the [UART, SPI, and I2C guide](/connectivity/uart-spi-i2c)).
+  Touch input is handled automatically through the I2C bus when using the official DSI touchscreen. You do not need to install a separate driver. If touch is unresponsive after enabling the overlay, verify that I2C is enabled via your board's configuration utility (see the [UART, SPI, and I2C guide](/connectivity/uart-spi-i2c)).
 </Note>
 
 ## Audio Output
@@ -174,7 +174,7 @@ Press `F6` to choose a sound card, and use the arrow keys to adjust volume level
 sudo alsactl store
 ```
 
-**Using raspi-config:**
+**Using your board's configuration utility** (e.g. `raspi-config` on compatible images — the exact name may differ on your board):
 
 ```bash
 sudo raspi-config

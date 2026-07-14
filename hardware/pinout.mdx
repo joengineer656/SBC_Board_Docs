@@ -1,5 +1,5 @@
 ---
-title: "GPIO Pinout: 40-Pin Header Complete Reference"
+title: "GPIO Pinout: Complete 40-Pin Header Reference Guide"
 sidebarTitle: "Pinout"
 description: "Full 40-pin GPIO header pinout with pin numbers, GPIO numbers, alternate functions, and voltage levels for safe hardware interfacing."
 ---
@@ -83,7 +83,7 @@ The GPIO pins share circuitry with several dedicated peripheral controllers. Ena
   | CE0    | GPIO 8  | 24          |
   | CE1    | GPIO 7  | 26          |
 
-  Enable SPI in your OS configuration (e.g., via `raspi-config` or the device tree overlay `spi-bcm2835`) before using these pins with an SPI library. The bus supports clock speeds up to 125 MHz in theory, but practical maximums depend on your wiring length and peripheral.
+  Enable SPI in your OS configuration before using these pins with an SPI library. On most Linux distributions, this means enabling the appropriate SPI device tree overlay in your boot configuration file (e.g., `spi0` or `spi-gpio`). The bus supports clock speeds up to several tens of MHz in practice, but the usable maximum depends on your wiring length, capacitance, and peripheral datasheet.
 </Accordion>
 
 <Accordion title="I2C Pins (I2C1)">

@@ -1,5 +1,5 @@
 ---
-title: "UART, SPI, and I2C Communication Protocols"
+title: "Using UART, SPI, and I2C Serial Interfaces on Your SBC"
 sidebarTitle: "UART / SPI / I2C"
 description: "Enable and use UART, SPI, and I2C serial communication on your SBC to connect sensors, OLED displays, ADCs, and other GPIO peripherals."
 ---
@@ -12,7 +12,9 @@ Your SBC exposes several hardware serial communication buses that let you connec
 
     UART (Universal Asynchronous Receiver-Transmitter) is available on the GPIO header as `TX` and `RX` pins. To use it for your own application you need to enable the hardware UART and, importantly, disable the system's serial console so the port is free for your code.
 
-    **Option 1 — raspi-config (recommended):**
+    **Option 1 — Board configuration tool (recommended):**
+
+    Many SBC images ship a configuration utility — commonly called `raspi-config` on Raspberry Pi-compatible boards, though the exact name may differ on your image. Run it from the terminal:
 
     ```bash
     sudo raspi-config
@@ -97,7 +99,7 @@ Your SBC exposes several hardware serial communication buses that let you connec
   <Tab title="SPI">
     ## Enabling SPI
 
-    SPI (Serial Peripheral Interface) is a synchronous four-wire protocol — MOSI, MISO, SCLK, and one chip-select (CE) line per device. Enable it through `raspi-config`:
+    SPI (Serial Peripheral Interface) is a synchronous four-wire protocol — MOSI, MISO, SCLK, and one chip-select (CE) line per device. Enable it through your board's configuration utility (e.g. `raspi-config` on compatible images — the name may differ on your board):
 
     ```bash
     sudo raspi-config
@@ -170,7 +172,7 @@ Your SBC exposes several hardware serial communication buses that let you connec
   <Tab title="I2C">
     ## Enabling I2C
 
-    I2C (Inter-Integrated Circuit) lets you daisy-chain many devices on just two wires — SDA (data) and SCL (clock) — each addressed by a unique 7-bit address. Enable it through `raspi-config`:
+    I2C (Inter-Integrated Circuit) lets you daisy-chain many devices on just two wires — SDA (data) and SCL (clock) — each addressed by a unique 7-bit address. Enable it through your board's configuration utility (e.g. `raspi-config` on compatible images — the name may differ on your board):
 
     ```bash
     sudo raspi-config

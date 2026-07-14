@@ -1,5 +1,5 @@
 ---
-title: "Frequently Asked Questions About the SBC Board"
+title: "SBC Board FAQ: Setup, Hardware, Software, and Licensing"
 sidebarTitle: "FAQ"
 description: "Answers to the most common questions about the SBC board, covering setup, hardware specs, software, connectivity, and open-source licensing."
 ---
@@ -85,19 +85,22 @@ This page collects answers to the questions asked most often by the community. I
 </Accordion>
 
 <Accordion title="How do I update the bootloader?">
-  Update the bootloader by running the following commands in a terminal on the board:
+  The bootloader is distributed as a standard Debian/Ubuntu package and is updated through the normal package manager workflow. Run the following commands in a terminal on the board:
 
   ```bash
-  sudo apt update && sudo apt install sbc-bootloader
+  sudo apt update
+  sudo apt full-upgrade
   ```
 
-  After installation, reboot the board to activate the new bootloader. The package manager handles writing the updated bootloader to the correct partition automatically — you do not need to manually flash anything.
+  The `full-upgrade` command upgrades all installed packages including the bootloader package. After the upgrade completes, reboot the board to activate the new bootloader — the package's post-install script writes the updated binary to the correct partition automatically, so no manual flashing is required.
 
-  Check the current bootloader version at any time with:
+  To check which bootloader-related packages are installed and their current versions:
 
   ```bash
-  sbc-bootloader --version
+  dpkg -l | grep -i bootloader
   ```
+
+  If the official OS image ships a dedicated bootloader update tool, its name and usage instructions are documented in the release notes for each image version, available on the downloads page.
 </Accordion>
 
 <Accordion title="Does the board support Docker?">
